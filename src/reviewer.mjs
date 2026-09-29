@@ -126,7 +126,7 @@ export async function submitReview({ apiUrl, apiToken, payload, installationId, 
     headers: {
       authorization: `Bearer ${apiToken}`,
       "content-type": "application/json",
-      "user-agent": "Peerivo-Reviewer-GitHub-App/0.1",
+      "user-agent": "Peerivo-Reviewer-GitHub-App/0.2",
       "x-peerivo-github-installation-id": String(installationId),
       "x-peerivo-github-delivery-id": String(deliveryId || "")
     },
