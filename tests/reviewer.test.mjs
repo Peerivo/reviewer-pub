@@ -38,6 +38,9 @@ test("collector uses authoritative GitHub data and includes workflow content", a
   assert.equal(payload.baseSha, sha("a"));
   assert.equal(payload.headSha, sha("b"));
   assert.equal(payload.workflows.length, 1);
+  assert.ok(payload.securityFiles.some(item => item.path === "src/a.mjs"));
+  assert.ok(payload.securityFiles.some(item => item.path === ".github/workflows/ci.yml"));
+  assert.ok(payload.securityFiles.every(item => typeof item.headContent === "string"));
 });
 
 test("collector fails closed when GitHub omits a text patch", async () => {
@@ -50,4 +53,12 @@ test("collector fails closed when GitHub omits a text patch", async () => {
 test("Reviewer response schema rejects fail-open ambiguity", () => {
   assert.throws(() => validateReviewerResponse({ schemaVersion: 1, reviewId: "r", findings: [], report: "x" }), /failed/);
   assert.equal(validateReviewerResponse({ schemaVersion: 1, reviewId: "r", failed: false, findings: [], report: "ok" }).failed, false);
+});
+
+test("collector fails closed when bounded security snapshot count is exceeded", async () => {
+  await assert.rejects(() => collectReviewPayload({
+    github: mockGithub(), repo: "acme/widget", pullNumber: 7, token: "x",
+    maxFiles: 1000, maxWorkflows: 20, maxWorkflowBytes: 10000,
+    maxSecurityFiles: 1, maxSecurityFileBytes: 10000, maxSecurityBytes: 20000
+  }), /MAX_SECURITY_FILES/);
 });
