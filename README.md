@@ -18,7 +18,7 @@ Peerivo Reviewer GitHub App (this repo)
   - verifies GitHub webhook HMAC
   - exchanges App JWT for installation token
   - re-fetches authoritative PR/base/head/files
-  - reads workflow files with Contents: read
+  - reads bounded workflow + security-relevant files with Contents: read
   - never executes repository code
         |
         v
@@ -92,13 +92,15 @@ The check fails rather than silently passing when:
 
 ## Data boundary
 
-The integration sends bounded diff/workflow metadata to the private Reviewer API. Reviewed project code is not executed. Source payloads and detected secret material must not be written to application logs.
+The integration sends bounded authoritative diff/workflow metadata plus bounded head/base contents for security-relevant changed files and the external runtime security profile to the private Reviewer API. This enables tenant/RLS, customer-secret, webhook, host/container and supply-chain checks without executing reviewed code.
+
+The collector has explicit file-count, per-file byte and aggregate byte limits and fails closed when required security content cannot be obtained completely. Source payloads and detected secret material must not be written to application logs.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Status
 
-`0.1.0` — initial GitHub App shell for external pilot preparation.
+`0.2.0` — GitHub App shell with bounded SaaS runtime security snapshot collection for external pilot.
 
 ## License
 
