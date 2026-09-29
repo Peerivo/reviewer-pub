@@ -48,6 +48,9 @@ export function loadConfig(env = process.env) {
     maxFiles: integer(env, "MAX_FILES", 1000, { max: 100000 }),
     maxWorkflows: integer(env, "MAX_WORKFLOWS", 200, { max: 1000 }),
     maxWorkflowBytes: integer(env, "MAX_WORKFLOW_BYTES", 1024 * 1024, { max: 10 * 1024 * 1024 }),
+    maxSecurityFiles: integer(env, "MAX_SECURITY_FILES", 200, { max: 2000 }),
+    maxSecurityFileBytes: integer(env, "MAX_SECURITY_FILE_BYTES", 512 * 1024, { max: 4 * 1024 * 1024 }),
+    maxSecurityBytes: integer(env, "MAX_SECURITY_BYTES", 4 * 1024 * 1024, { max: 16 * 1024 * 1024 }),
     reviewTimeoutMs: integer(env, "REVIEW_TIMEOUT_MS", 30000, { min: 1000, max: 120000 })
   });
 }

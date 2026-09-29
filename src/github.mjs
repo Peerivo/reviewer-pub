@@ -42,7 +42,7 @@ export class GitHubClient {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "x-github-api-version": API_VERSION,
-        "user-agent": "Peerivo-Reviewer-GitHub-App/0.1"
+        "user-agent": "Peerivo-Reviewer-GitHub-App/0.2"
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: "error"

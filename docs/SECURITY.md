@@ -27,7 +27,7 @@ Redirects are rejected by the HTTP client for both trust boundaries.
 
 ## Coverage bounds
 
-The service fails closed on truncated repository trees, missing required text patches, incomplete workflow content, excessive file/workflow counts, oversized workflow data, invalid response schemas and review timeouts.
+The service fails closed on truncated repository trees, missing required text patches, incomplete workflow content, incomplete security-relevant head/base content, excessive file/workflow/security counts, oversized workflow/security data, invalid response schemas and review timeouts.
 
 Binary changes may have no textual patch and are represented with an empty patch. They are not executed or downloaded for analysis by this shell.
 
@@ -37,7 +37,7 @@ After HMAC verification and JSON parsing, supported pull-request deliveries are 
 
 ## Logging
 
-Do not log raw webhook bodies, diff payloads, workflow content, authorization headers, installation tokens or Reviewer API responses containing source fragments. Operational logs should contain only delivery/repository/PR identifiers and coarse success/failure state.
+Do not log raw webhook bodies, diff payloads, workflow content, security snapshot content, authorization headers, installation tokens or Reviewer API responses containing source fragments. Operational logs should contain only delivery/repository/PR identifiers and coarse success/failure state.
 
 ## Reporting vulnerabilities
 
