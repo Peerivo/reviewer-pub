@@ -24,7 +24,7 @@ export function createApp({ config, fetchImpl = fetch }) {
 
   return {
     health() {
-      return { ok: true, service: "peerivo-reviewer-github-app", version: "0.1.0" };
+      return { ok: true, service: "peerivo-reviewer-github-app", version: "0.2.0" };
     },
 
     verify(rawBody, signatureHeader) {
@@ -48,7 +48,7 @@ export function createApp({ config, fetchImpl = fetch }) {
         external_id: `delivery:${deliveryId || "unknown"};pr:${pullNumber}`,
         output: {
           title: "Peerivo Reviewer is checking this pull request",
-          summary: "The GitHub App is collecting bounded authoritative diff/workflow metadata. Reviewed project code is not executed."
+          summary: "The GitHub App is collecting bounded authoritative diff/workflow/security metadata. Reviewed project code is not executed."
         }
       });
       const checkId = check?.id;
@@ -62,7 +62,10 @@ export function createApp({ config, fetchImpl = fetch }) {
           token,
           maxFiles: config.maxFiles,
           maxWorkflows: config.maxWorkflows,
-          maxWorkflowBytes: config.maxWorkflowBytes
+          maxWorkflowBytes: config.maxWorkflowBytes,
+          maxSecurityFiles: config.maxSecurityFiles,
+          maxSecurityFileBytes: config.maxSecurityFileBytes,
+          maxSecurityBytes: config.maxSecurityBytes
         });
         if (reviewPayload.headSha !== headSha.toLowerCase()) throw new Error("PR head changed during collection; retry on the new synchronize webhook");
 
