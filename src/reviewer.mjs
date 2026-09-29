@@ -1,5 +1,14 @@
 const WORKFLOW_RE = /^\.github\/workflows\/[^/]+\.ya?ml$/i;
 const KNOWN_BINARY_RE = /\.(?:png|jpe?g|gif|webp|ico|pdf|zip|gz|tgz|7z|woff2?|ttf|otf|mp3|mp4|mov|avi|webm|so|dll|dylib|exe|bin)$/i;
+const RUNTIME_PROFILE = ".reviewer/external-runtime-security.json";
+
+function isSaasSecurityRelevantPath(path) {
+  return path === RUNTIME_PROFILE
+    || /(?:^|\/)(?:Dockerfile)(?:\.[^/]*)?$/i.test(path)
+    || /(?:^|\/)(?:docker-compose|compose)(?:\.[^/]*)?\.ya?ml$/i.test(path)
+    || /(?:^|\/)(?:api|server|backend|src\/server|routes?|controllers?|handlers?)(?:\/|\.|$)/i.test(path)
+    || /\.(?:sql|ya?ml|json|js|mjs|cjs|ts|tsx|jsx|py|php|go|cs|java|rb)$/i.test(path);
+}
 
 function fullSha(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{40}$/i.test(value)) throw new Error(`${label} is not a full commit SHA`);
@@ -14,7 +23,18 @@ export function shouldReviewPullRequestAction(action) {
   return ["opened", "reopened", "synchronize", "ready_for_review"].includes(String(action));
 }
 
-export async function collectReviewPayload({ github, repo, pullNumber, token, maxFiles, maxWorkflows, maxWorkflowBytes }) {
+export async function collectReviewPayload({
+  github,
+  repo,
+  pullNumber,
+  token,
+  maxFiles,
+  maxWorkflows,
+  maxWorkflowBytes,
+  maxSecurityFiles = 200,
+  maxSecurityFileBytes = 512 * 1024,
+  maxSecurityBytes = 4 * 1024 * 1024
+}) {
   const pr = await github.pullRequest(repo, pullNumber, token);
   const baseSha = fullSha(pr?.base?.sha, "base SHA");
   const headSha = fullSha(pr?.head?.sha, "head SHA");
@@ -47,6 +67,35 @@ export async function collectReviewPayload({ github, repo, pullNumber, token, ma
     workflows.push({ path, content });
   }
 
+  const securityPaths = [...new Set([
+    ...changes.filter(item => isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
+  ])];
+  if (securityPaths.length > maxSecurityFiles) {
+    throw new Error(`security snapshot exceeds MAX_SECURITY_FILES (${maxSecurityFiles})`);
+  }
+
+  async function optionalContent(path, sha) {
+    try {
+      return await github.fileContent(repo, path, sha, token, { maxBytes: maxSecurityFileBytes });
+    } catch (error) {
+      if (error?.status === 404) return null;
+      throw error;
+    }
+  }
+
+  let totalSecurityBytes = 0;
+  const securityFiles = [];
+  for (const path of securityPaths) {
+    const headContent = await optionalContent(path, headSha);
+    const baseContent = await optionalContent(path, baseSha);
+    totalSecurityBytes += Buffer.byteLength(headContent || "") + Buffer.byteLength(baseContent || "");
+    if (totalSecurityBytes > maxSecurityBytes) {
+      throw new Error(`security snapshot exceeds MAX_SECURITY_BYTES (${maxSecurityBytes})`);
+    }
+    securityFiles.push({ path, headContent, baseContent });
+  }
+
   return {
     schemaVersion: 1,
     platform: "github",
@@ -57,7 +106,8 @@ export async function collectReviewPayload({ github, repo, pullNumber, token, ma
     visibility: pr?.base?.repo?.visibility || (pr?.base?.repo?.private ? "private" : "public"),
     allFiles,
     changes,
-    workflows
+    workflows,
+    securityFiles
   };
 }
 
