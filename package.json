@@ -1,0 +1,17 @@
+{
+  "name": "@peerivo/reviewer-github-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public thin GitHub App shell for Peerivo Reviewer",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "node --check src/*.mjs && node --check tests/*.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run lint && npm test",
+    "start": "node src/server.mjs"
+  }
+}
