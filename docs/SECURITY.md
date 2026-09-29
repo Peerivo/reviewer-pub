@@ -31,6 +31,10 @@ The service fails closed on truncated repository trees, missing required text pa
 
 Binary changes may have no textual patch and are represented with an empty patch. They are not executed or downloaded for analysis by this shell.
 
+## Webhook acknowledgement
+
+After HMAC verification and JSON parsing, supported pull-request deliveries are acknowledged with HTTP `202` before the analyzer call completes. Review failure is expressed through the GitHub Check Run, not by holding the webhook connection open. A process crash before completion is detectable as a missing/incomplete check and must be covered by operational monitoring before paid production.
+
 ## Logging
 
 Do not log raw webhook bodies, diff payloads, workflow content, authorization headers, installation tokens or Reviewer API responses containing source fragments. Operational logs should contain only delivery/repository/PR identifiers and coarse success/failure state.

@@ -67,13 +67,17 @@ Health endpoint:
 GET /healthz
 ```
 
-## Required deployment secrets
+## Bootstrap and required deployment secrets
+
+The landing page and `/healthz` can boot before GitHub App credentials are provisioned. This lets us deploy the HTTPS shell first, use its URL when creating the GitHub App, and then add secrets without changing the public endpoint.
 
 `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` and `REVIEWER_API_TOKEN` are server-side secrets. They must never be committed to this public repository or delivered to customer repositories.
 
 The GitHub App private key is used only to obtain short-lived installation tokens. The Reviewer API token authenticates this hosted integration to the private service; customer entitlement is resolved server-side from installation/repository identity.
 
 ## Fail-closed behavior
+
+Valid GitHub webhooks are acknowledged with HTTP `202` before the potentially long review finishes, so GitHub's webhook response window is not coupled to analyzer latency. The background review still creates/updates the Check Run and fails closed.
 
 The check fails rather than silently passing when:
 

@@ -27,11 +27,19 @@ function httpsUrl(env, name) {
   return url.origin + url.pathname.replace(/\/$/, "");
 }
 
+export function loadServerConfig(env = process.env) {
+  return Object.freeze({
+    port: integer(env, "PORT", 8080, { max: 65535 }),
+    host: String(env.HOST || "0.0.0.0")
+  });
+}
+
 export function loadConfig(env = process.env) {
   const privateKey = required(env, "GITHUB_APP_PRIVATE_KEY").replace(/\\n/g, "\n");
   if (!privateKey.includes("PRIVATE KEY")) throw new Error("GITHUB_APP_PRIVATE_KEY is not a PEM private key");
 
   return Object.freeze({
+    ...loadServerConfig(env),
     githubAppId: required(env, "GITHUB_APP_ID"),
     githubPrivateKey: privateKey,
     githubWebhookSecret: required(env, "GITHUB_WEBHOOK_SECRET"),
@@ -40,8 +48,6 @@ export function loadConfig(env = process.env) {
     maxFiles: integer(env, "MAX_FILES", 1000, { max: 100000 }),
     maxWorkflows: integer(env, "MAX_WORKFLOWS", 200, { max: 1000 }),
     maxWorkflowBytes: integer(env, "MAX_WORKFLOW_BYTES", 1024 * 1024, { max: 10 * 1024 * 1024 }),
-    reviewTimeoutMs: integer(env, "REVIEW_TIMEOUT_MS", 30000, { min: 1000, max: 120000 }),
-    port: integer(env, "PORT", 8080, { max: 65535 }),
-    host: String(env.HOST || "0.0.0.0")
+    reviewTimeoutMs: integer(env, "REVIEW_TIMEOUT_MS", 30000, { min: 1000, max: 120000 })
   });
 }
