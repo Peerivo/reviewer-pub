@@ -10,7 +10,7 @@ async function listen(server) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-test("landing and health start before GitHub App credentials are provisioned", async (t) => {
+test("landing and health start before provider credentials are provisioned", async (t) => {
   const server = createServer();
   const base = await listen(server);
   t.after(() => server.close());
@@ -39,6 +39,24 @@ test("webhook fails closed when runtime secrets are not configured", async (t) =
       "content-type": "application/json",
       "x-github-event": "pull_request",
       "x-hub-signature-256": "sha256=" + "0".repeat(64)
+    },
+    body: "{}"
+  });
+
+  assert.equal(response.status, 503);
+});
+
+test("GitLab webhook fails closed when runtime secrets are not configured", async (t) => {
+  const server = createServer();
+  const base = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${base}/webhooks/gitlab`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-gitlab-event": "Merge Request Hook",
+      "x-gitlab-token": "not-configured"
     },
     body: "{}"
   });
