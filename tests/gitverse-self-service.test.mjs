@@ -44,7 +44,7 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
     if (url.pathname === "/repos/peerivo/demo/hooks" && options.method === "POST") {
       const body = JSON.parse(options.body);
       assert.deepEqual(body.events, ["pull_request"]);
-      assert.equal(body.config.url, "https://reviewer.example.com/webhooks/gitverse");
+      assert.equal(body.config.url, "https://reviewer.example.com/webhooks/gitverse/77");
       assert.match(body.config.authorization_header, /^Bearer pvrwh_/);
       return Response.json({ id: 88, active: true, events: body.events, config: body.config }, { status: 201 });
     }
@@ -98,12 +98,10 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   const stored = runtime.store.getRepository(77);
   assert.throws(() => runtime.authenticateRepositoryWebhook({
     repositoryId: 77,
-    fullName: "peerivo/demo",
     authorizationHeader: "Bearer wrong"
   }), /invalid webhook authorization/);
   const auth = runtime.authenticateRepositoryWebhook({
     repositoryId: 77,
-    fullName: "peerivo/demo",
     authorizationHeader: `Bearer ${stored.webhookSecret}`
   });
   assert.equal(auth.repositoryId, 77);
