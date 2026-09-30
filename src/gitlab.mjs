@@ -1,6 +1,7 @@
 export class GitLabError extends Error {
   constructor(message, status = 500) {
     super(message);
+    this.name = "GitLabError";
     this.status = status;
   }
 }
@@ -28,25 +29,63 @@ async function responseJson(response, label) {
 }
 
 export class GitLabClient {
-  constructor({ baseUrl, token, fetchImpl = fetch }) {
+  constructor({ baseUrl, token, authMode = "private-token", fetchImpl = fetch }) {
     this.baseUrl = String(baseUrl).replace(/\/$/, "");
     this.apiBase = this.baseUrl + "/api/v4";
     this.token = token;
+    this.authMode = authMode;
     this.fetchImpl = fetchImpl;
   }
 
-  async request(path, { method = "GET" } = {}) {
+  authHeaders() {
+    if (this.authMode === "bearer") return { authorization: `Bearer ${this.token}` };
+    return { "private-token": this.token };
+  }
+
+  async request(path, { method = "GET", body = null } = {}) {
     if (!path.startsWith("/")) throw new GitLabError("GitLab API path must be absolute", 500);
+    const headers = {
+      accept: "application/json",
+      ...this.authHeaders(),
+      "user-agent": "Peerivo-Reviewer-GitLab/0.4"
+    };
+    let payload;
+    if (body !== null) {
+      headers["content-type"] = "application/json";
+      payload = JSON.stringify(body);
+    }
     const response = await this.fetchImpl(this.apiBase + path, {
       method,
-      headers: {
-        accept: "application/json",
-        "private-token": this.token,
-        "user-agent": "Peerivo-Reviewer-GitLab/0.3"
-      },
+      headers,
+      body: payload,
       redirect: "error"
     });
     return responseJson(response, `GitLab API ${method} ${path.split("?")[0]}`);
+  }
+
+  async currentUser() {
+    const user = await this.request("/user");
+    if (!Number.isSafeInteger(user?.id) || user.id < 1 || typeof user?.username !== "string" || !user.username) {
+      throw new GitLabError("GitLab returned invalid authenticated user identity", 502);
+    }
+    return user;
+  }
+
+  async manageableProjects({ maxProjects = 1000 } = {}) {
+    const limit = Number(maxProjects);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5000) throw new GitLabError("invalid project discovery limit", 500);
+    const result = [];
+    const pages = Math.ceil(limit / 100) + 1;
+    for (let page = 1; page <= pages; page += 1) {
+      const batch = await this.request(
+        `/projects?membership=true&min_access_level=40&archived=false&simple=true&order_by=path&sort=asc&per_page=100&page=${page}`
+      );
+      if (!Array.isArray(batch)) throw new GitLabError("GitLab projects response was not an array", 502);
+      result.push(...batch);
+      if (result.length > limit) throw new GitLabError(`GitLab account exceeds project discovery limit (${limit})`, 422);
+      if (batch.length < 100) return result;
+    }
+    throw new GitLabError("GitLab project pagination exceeded safe bound", 422);
   }
 
   async project(project) {
@@ -102,7 +141,7 @@ export class GitLabClient {
       `${this.apiBase}/projects/${projectId(project)}/repository/files/${encodedPath}/raw?ref=${encodeURIComponent(ref)}`,
       {
         method: "GET",
-        headers: { "private-token": this.token, "user-agent": "Peerivo-Reviewer-GitLab/0.3" },
+        headers: { ...this.authHeaders(), "user-agent": "Peerivo-Reviewer-GitLab/0.4" },
         redirect: "error"
       }
     );
@@ -115,6 +154,55 @@ export class GitLabClient {
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.length > maxBytes) throw new GitLabError(`${path} exceeds byte limit`, 422);
     return bytes.toString("utf8");
+  }
+
+  async listWebhooks(project, { maxHooks = 500 } = {}) {
+    const result = [];
+    const pages = Math.ceil(maxHooks / 100) + 1;
+    for (let page = 1; page <= pages; page += 1) {
+      const batch = await this.request(`/projects/${projectId(project)}/hooks?per_page=100&page=${page}`);
+      if (!Array.isArray(batch)) throw new GitLabError("GitLab webhooks response was not an array", 502);
+      result.push(...batch);
+      if (result.length > maxHooks) throw new GitLabError("GitLab project has too many webhooks", 422);
+      if (batch.length < 100) return result;
+    }
+    throw new GitLabError("GitLab webhook pagination exceeded safe bound", 422);
+  }
+
+  async createWebhook(project, { url, token }) {
+    return this.request(`/projects/${projectId(project)}/hooks`, {
+      method: "POST",
+      body: {
+        url,
+        token,
+        name: "Peerivo Reviewer",
+        merge_requests_events: true,
+        push_events: false,
+        enable_ssl_verification: true
+      }
+    });
+  }
+
+  async updateWebhook(project, hookId, { url, token }) {
+    const id = Number(hookId);
+    if (!Number.isSafeInteger(id) || id < 1) throw new GitLabError("invalid GitLab webhook id", 400);
+    return this.request(`/projects/${projectId(project)}/hooks/${id}`, {
+      method: "PUT",
+      body: {
+        url,
+        token,
+        name: "Peerivo Reviewer",
+        merge_requests_events: true,
+        push_events: false,
+        enable_ssl_verification: true
+      }
+    });
+  }
+
+  async deleteWebhook(project, hookId) {
+    const id = Number(hookId);
+    if (!Number.isSafeInteger(id) || id < 1) throw new GitLabError("invalid GitLab webhook id", 400);
+    return this.request(`/projects/${projectId(project)}/hooks/${id}`, { method: "DELETE" });
   }
 
   async setCommitStatus(project, sha, { state, description, ref = "", targetUrl = "" }) {
