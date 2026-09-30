@@ -246,7 +246,7 @@ export function createServer({
         return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.5.0" });
       }
       if (req.method === "GET" && url.pathname === "/") {
-        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}a{color:inherit;font-weight:650}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub, GitLab and GitVerse pull/merge-request security review. It reads bounded repository metadata and never executes reviewed project code.</p><p><a href="/connect/gitlab">Connect GitLab</a> · <a href="/connect/gitverse">Connect GitVerse</a></p><p>Webhooks: <code>/webhooks/github</code>, <code>/webhooks/gitlab</code> and <code>/webhooks/gitverse</code></p>`);
+        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}a{color:inherit;font-weight:650}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub, GitLab and GitVerse pull/merge-request security review. It reads bounded repository metadata and never executes reviewed project code.</p><p><a href="/connect/gitlab">Connect GitLab</a> · <a href="/connect/gitverse">Connect GitVerse</a></p><p>Webhooks: <code>/webhooks/github</code>, <code>/webhooks/gitlab</code> and <code>/webhooks/gitverse/&lt;repository-id&gt;</code></p>`);
       }
 
       if (req.method === "GET" && url.pathname === "/connect/gitlab") {
@@ -411,8 +411,12 @@ export function createServer({
         return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
       }
 
-      if (req.method === "POST" && url.pathname === "/webhooks/gitverse") {
+      if (req.method === "POST" && /^\/webhooks\/gitverse\/[1-9][0-9]*$/.test(url.pathname)) {
         const runtime = getGitVerseApp();
+        const repositoryId = Number(url.pathname.split("/").pop());
+        if (!Number.isSafeInteger(repositoryId)) {
+          return json(res, 400, { ok: false, error: "invalid repository id" });
+        }
         const rawBody = await readBody(req);
         let payload;
         try {
@@ -428,8 +432,8 @@ export function createServer({
           || ""
         );
         const authContext = runtime.authenticateWebhook({
-          authorizationHeader: req.headers.authorization,
-          payload
+          repositoryId,
+          authorizationHeader: req.headers.authorization
         });
 
         Promise.resolve()
@@ -437,7 +441,8 @@ export function createServer({
             deliveryId,
             payload,
             authContext,
-            authorizationHeader: req.headers.authorization
+            authorizationHeader: req.headers.authorization,
+            repositoryId
           }))
           .catch(error => backgroundFailure(error, deliveryId));
 
