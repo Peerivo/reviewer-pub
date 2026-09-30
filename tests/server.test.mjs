@@ -19,8 +19,8 @@ test("landing and health start before provider credentials are provisioned", asy
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), {
     ok: true,
-    service: "peerivo-reviewer-github-app",
-    version: "0.1.0"
+    service: "peerivo-reviewer-integrations",
+    version: "0.3.0"
   });
 
   const landing = await fetch(base);
