@@ -9,7 +9,7 @@ function requiredWebhookIdentity(payload, allowedProjects) {
   const targetProjectId = payload?.object_attributes?.target_project_id;
 
   if (!Number.isSafeInteger(projectId) || projectId < 1) throw new Error("webhook is missing project.id");
-  if (typeof repo !== "string" || !/^[^/\s]+\/.+[^/\s]$/.test(repo)) throw new Error("webhook is missing project.path_with_namespace");
+  if (typeof repo !== "string" || !/^[^/\s]+(?:\/[^/\s]+)+$/.test(repo)) throw new Error("webhook is missing project.path_with_namespace");
   if (!allowedProjects.has(repo)) throw Object.assign(new Error("GitLab project is not enabled for Reviewer"), { status: 403 });
   if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) throw new Error("webhook is missing merge request iid");
   if (targetProjectId !== undefined && targetProjectId !== projectId) throw new Error("webhook target project mismatch");
