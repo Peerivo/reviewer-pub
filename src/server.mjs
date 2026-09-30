@@ -2,11 +2,14 @@ import http from "node:http";
 import { createApp } from "./app.mjs";
 import { createGitLabApp } from "./gitlab-app.mjs";
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
-import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadServerConfig } from "./config.mjs";
+import { createGitVerseApp } from "./gitverse-app.mjs";
+import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
+import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadGitVerseOAuthConfigOptional, loadServerConfig } from "./config.mjs";
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 const MAX_FORM_BYTES = 256 * 1024;
 const GITLAB_SESSION_COOKIE = "peerivo_gitlab_install";
+const GITVERSE_SESSION_COOKIE = "peerivo_gitverse_install";
 
 function json(res, status, body) {
   const raw = JSON.stringify(body);
@@ -73,6 +76,14 @@ function clearSessionCookie() {
   return `${GITLAB_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
 }
 
+function gitverseSessionCookie(token, maxAgeSeconds) {
+  return `${GITVERSE_SESSION_COOKIE}=${token}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+function clearGitVerseSessionCookie() {
+  return `${GITVERSE_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -115,6 +126,39 @@ ${updated ? '<p class="notice">GitLab installation updated.</p>' : ""}
 </form>`;
 }
 
+function repositoriesPage(selection, { updated = false } = {}) {
+  const rows = selection.repositories.map(repository => {
+    const checked = repository.selected ? " checked" : "";
+    const detail = repository.visibility ? ` · ${escapeHtml(repository.visibility)}` : "";
+    return `<label class="project"><input type="checkbox" name="repository" value="${repository.id}"${checked}><span><strong>${escapeHtml(repository.fullName)}</strong><small>${escapeHtml(repository.name)}${detail}</small></span></label>`;
+  }).join("");
+
+  return `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connect GitVerse · Peerivo Reviewer</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:860px;margin:7vh auto;padding:0 24px;line-height:1.5;color:#18181b}
+h1{font-size:2rem;margin-bottom:.4rem}p{color:#52525b}.notice{padding:12px 14px;background:#f4f4f5;border-radius:10px}
+.projects{display:grid;gap:8px;margin:24px 0}.project{display:flex;gap:12px;padding:12px;border:1px solid #e4e4e7;border-radius:10px;align-items:flex-start}
+.project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}
+.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;background:#18181b;color:white;cursor:pointer}
+.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
+</style>
+<h1>Connect GitVerse</h1>
+<p>Signed in as <strong>${escapeHtml(selection.login)}</strong>. Select repositories where Peerivo Reviewer should review pull requests.</p>
+${updated ? '<p class="notice">GitVerse installation updated.</p>' : ""}
+<form method="post" action="/gitverse/repositories">
+<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
+<div class="projects">${rows || "<p>No Owner/Admin repositories are available to this account.</p>"}</div>
+<div class="actions"><button type="submit">Save GitVerse repositories</button></div>
+</form>
+<form class="secondary" method="post" action="/gitverse/disconnect">
+<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
+<button type="submit">Disconnect GitVerse</button>
+</form>`;
+}
+
 function backgroundFailure(error, deliveryId) {
   const kind = error?.name || "Error";
   process.stderr.write(`Reviewer delivery ${deliveryId || "unknown"} failed closed (${kind})\n`);
@@ -125,6 +169,8 @@ export function createServer({
   gitlabConfig,
   gitlabOAuthConfig,
   gitlabSelfService,
+  gitverseOAuthConfig,
+  gitverseSelfService,
   fetchImpl = fetch
 } = {}) {
   let githubApp;
@@ -132,6 +178,10 @@ export function createServer({
   let selfService = gitlabSelfService || null;
   let oauthConfigResolved = gitlabOAuthConfig !== undefined;
   let resolvedOAuthConfig = gitlabOAuthConfig ?? null;
+  let gitverseApp;
+  let gitverseService = gitverseSelfService || null;
+  let gitverseOAuthConfigResolved = gitverseOAuthConfig !== undefined;
+  let resolvedGitVerseOAuthConfig = gitverseOAuthConfig ?? null;
 
   const getGithubApp = () => {
     if (!githubApp) githubApp = createApp({ config: config || loadConfig(), fetchImpl });
@@ -163,14 +213,40 @@ export function createServer({
     return gitlabApp;
   };
 
+  const getGitVerseSelfService = ({ required = false } = {}) => {
+    if (gitverseService) return gitverseService;
+    if (!gitverseOAuthConfigResolved) {
+      resolvedGitVerseOAuthConfig = loadGitVerseOAuthConfigOptional();
+      gitverseOAuthConfigResolved = true;
+    }
+    if (!resolvedGitVerseOAuthConfig) {
+      if (required) throw Object.assign(new Error("GitVerse OAuth self-service is not configured"), { status: 503 });
+      return null;
+    }
+    gitverseService = createGitVerseSelfService({ config: resolvedGitVerseOAuthConfig, fetchImpl });
+    return gitverseService;
+  };
+
+  const getGitVerseApp = () => {
+    if (!gitverseApp) {
+      const selfService = getGitVerseSelfService({ required: true });
+      gitverseApp = createGitVerseApp({
+        config: resolvedGitVerseOAuthConfig,
+        selfService,
+        fetchImpl
+      });
+    }
+    return gitverseApp;
+  };
+
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/healthz") {
-        return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.4.0" });
+        return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.5.0" });
       }
       if (req.method === "GET" && url.pathname === "/") {
-        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}a{color:inherit;font-weight:650}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub and GitLab pull/merge-request security review. It reads bounded repository metadata, never executes reviewed project code, and publishes provider-native status.</p><p><a href="/connect/gitlab">Connect GitLab</a></p><p>Webhooks: <code>/webhooks/github</code> and <code>/webhooks/gitlab</code></p>`);
+        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}a{color:inherit;font-weight:650}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub, GitLab and GitVerse pull/merge-request security review. It reads bounded repository metadata and never executes reviewed project code.</p><p><a href="/connect/gitlab">Connect GitLab</a> · <a href="/connect/gitverse">Connect GitVerse</a></p><p>Webhooks: <code>/webhooks/github</code>, <code>/webhooks/gitlab</code> and <code>/webhooks/gitverse</code></p>`);
       }
 
       if (req.method === "GET" && url.pathname === "/connect/gitlab") {
@@ -221,6 +297,57 @@ export function createServer({
         return redirect(res, "/", {
           status: 303,
           headers: { "set-cookie": clearSessionCookie() }
+        });
+      }
+
+      if (req.method === "GET" && url.pathname === "/connect/gitverse") {
+        const runtime = getGitVerseSelfService({ required: true });
+        return redirect(res, runtime.beginOAuth());
+      }
+
+      if (req.method === "GET" && url.pathname === "/oauth/gitverse/callback") {
+        if (url.searchParams.get("error")) {
+          return html(res, 400, "<h1>GitVerse authorization was not completed.</h1><p>You can return and start the connection again.</p>", { privateResponse: true });
+        }
+        const runtime = getGitVerseSelfService({ required: true });
+        const result = await runtime.completeOAuth({
+          code: url.searchParams.get("code") || "",
+          state: url.searchParams.get("state") || ""
+        });
+        const maxAge = Math.floor((resolvedGitVerseOAuthConfig?.installSessionTtlMs || 60 * 60 * 1000) / 1000);
+        return redirect(res, "/gitverse/repositories", {
+          status: 303,
+          headers: { "set-cookie": gitverseSessionCookie(result.sessionToken, maxAge) }
+        });
+      }
+
+      if (req.method === "GET" && url.pathname === "/gitverse/repositories") {
+        const runtime = getGitVerseSelfService({ required: true });
+        const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
+        const selection = await runtime.repositorySelection(sessionToken);
+        return html(res, 200, repositoriesPage(selection, { updated: url.searchParams.get("updated") === "1" }), { privateResponse: true });
+      }
+
+      if (req.method === "POST" && url.pathname === "/gitverse/repositories") {
+        const runtime = getGitVerseSelfService({ required: true });
+        const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
+        const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf8"));
+        await runtime.applyRepositories({
+          sessionToken,
+          csrf: form.get("csrf") || "",
+          repositoryIds: form.getAll("repository")
+        });
+        return redirect(res, "/gitverse/repositories?updated=1", { status: 303 });
+      }
+
+      if (req.method === "POST" && url.pathname === "/gitverse/disconnect") {
+        const runtime = getGitVerseSelfService({ required: true });
+        const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
+        const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf8"));
+        await runtime.disconnect({ sessionToken, csrf: form.get("csrf") || "" });
+        return redirect(res, "/", {
+          status: 303,
+          headers: { "set-cookie": clearGitVerseSessionCookie() }
         });
       }
 
@@ -279,6 +406,39 @@ export function createServer({
 
         Promise.resolve()
           .then(() => runtime.handleWebhook({ event, deliveryId, payload, authContext }))
+          .catch(error => backgroundFailure(error, deliveryId));
+
+        return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
+      }
+
+      if (req.method === "POST" && url.pathname === "/webhooks/gitverse") {
+        const runtime = getGitVerseApp();
+        const rawBody = await readBody(req);
+        let payload;
+        try {
+          payload = JSON.parse(rawBody.toString("utf8"));
+        } catch {
+          return json(res, 400, { ok: false, error: "invalid JSON" });
+        }
+
+        const deliveryId = String(
+          req.headers["x-gitverse-delivery"]
+          || req.headers["x-request-id"]
+          || req.headers["idempotency-key"]
+          || ""
+        );
+        const authContext = runtime.authenticateWebhook({
+          authorizationHeader: req.headers.authorization,
+          payload
+        });
+
+        Promise.resolve()
+          .then(() => runtime.handleWebhook({
+            deliveryId,
+            payload,
+            authContext,
+            authorizationHeader: req.headers.authorization
+          }))
           .catch(error => backgroundFailure(error, deliveryId));
 
         return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
