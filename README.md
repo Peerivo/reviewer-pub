@@ -1,6 +1,6 @@
-# Peerivo Reviewer — GitHub + GitLab integrations
+# Peerivo Reviewer — GitHub + GitLab + GitVerse integrations
 
-Public, source-transparent GitHub/GitLab integration shell for **Peerivo Reviewer**.
+Public, source-transparent GitHub/GitLab/GitVerse integration shell for **Peerivo Reviewer**.
 
 Reviewer checks the security boundary of pull requests — CI authority, secrets, supply-chain references, caches, migrations and fail-open security logic — without executing the reviewed project's build, tests, install scripts or application code.
 
@@ -46,6 +46,24 @@ The previous `GITLAB_TOKEN` + `GITLAB_PROJECTS` configuration remains only as a 
 
 See [`docs/GITLAB.md`](docs/GITLAB.md).
 
+## GitVerse integration
+
+GitVerse customers can connect through OAuth and select repositories:
+
+```text
+GET /connect/gitverse
+  -> GitVerse OAuth Authorization Code + PKCE
+  -> /oauth/gitverse/callback
+  -> select Owner/Admin repositories
+  -> Reviewer provisions repository-scoped pull_request webhooks
+```
+
+OAuth access/refresh tokens and per-repository webhook Authorization credentials are encrypted at rest. Incoming events are authenticated against the exact installed repository before Reviewer re-fetches authoritative PR, patch, tree and workflow data from the GitVerse Public API.
+
+Hosted mode publishes/upserts a **Peerivo Reviewer** PR comment. The existing checksum-pinned GitVerse CI thin client remains available when a repository needs a hard CI merge gate.
+
+See [`docs/GITVERSE.md`](docs/GITVERSE.md).
+
 ## GitHub App permissions
 
 Repository permissions:
@@ -78,6 +96,7 @@ Webhook endpoints:
 ```text
 POST /webhooks/github
 POST /webhooks/gitlab
+POST /webhooks/gitverse/<repository-id>
 ```
 
 Health endpoint:
@@ -119,7 +138,7 @@ See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Status
 
-`0.4.0` — GitHub App + self-service GitLab OAuth installation shell with bounded authoritative SaaS runtime security snapshot collection.
+`0.5.0` — GitHub App + self-service GitLab/GitVerse OAuth installation shell with bounded authoritative server-side review collection.
 
 ## License
 

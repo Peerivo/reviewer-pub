@@ -137,3 +137,38 @@ export function loadGitLabOAuthConfigOptional(env = process.env) {
   if (!names.some(name => String(env[name] || "").trim())) return null;
   return loadGitLabOAuthConfig(env);
 }
+
+export function loadGitVerseOAuthConfig(env = process.env) {
+  const publicUrl = httpsUrl(env, "GITVERSE_PUBLIC_URL");
+  const tokenEncryptionKey = required(env, "GITVERSE_TOKEN_ENCRYPTION_KEY");
+  if (Buffer.byteLength(tokenEncryptionKey) < 32) {
+    throw new Error("GITVERSE_TOKEN_ENCRYPTION_KEY must contain at least 32 bytes");
+  }
+  return Object.freeze({
+    ...reviewerConfig(env),
+    webBaseUrl: optionalHttpsUrl(env, "GITVERSE_WEB_BASE_URL", "https://gitverse.ru"),
+    apiBaseUrl: optionalHttpsUrl(env, "GITVERSE_API_BASE_URL", "https://api.gitverse.ru"),
+    oauthClientId: required(env, "GITVERSE_OAUTH_CLIENT_ID"),
+    oauthClientSecret: required(env, "GITVERSE_OAUTH_CLIENT_SECRET"),
+    oauthRedirectUri: `${publicUrl}/oauth/gitverse/callback`,
+    webhookUrl: `${publicUrl}/webhooks/gitverse`,
+    installationsDb: required(env, "GITVERSE_INSTALLATIONS_DB"),
+    tokenEncryptionKey,
+    oauthStateTtlMs: integer(env, "GITVERSE_OAUTH_STATE_TTL_MS", 10 * 60 * 1000, { min: 60_000, max: 60 * 60 * 1000 }),
+    installSessionTtlMs: integer(env, "GITVERSE_INSTALL_SESSION_TTL_MS", 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 24 * 60 * 60 * 1000 }),
+    maxDiscoverRepositories: integer(env, "GITVERSE_MAX_DISCOVER_REPOSITORIES", 1000, { min: 1, max: 5000 }),
+    maxInstallRepositories: integer(env, "GITVERSE_MAX_INSTALL_REPOSITORIES", 100, { min: 1, max: 1000 })
+  });
+}
+
+export function loadGitVerseOAuthConfigOptional(env = process.env) {
+  const names = [
+    "GITVERSE_OAUTH_CLIENT_ID",
+    "GITVERSE_OAUTH_CLIENT_SECRET",
+    "GITVERSE_PUBLIC_URL",
+    "GITVERSE_INSTALLATIONS_DB",
+    "GITVERSE_TOKEN_ENCRYPTION_KEY"
+  ];
+  if (!names.some(name => String(env[name] || "").trim())) return null;
+  return loadGitVerseOAuthConfig(env);
+}
