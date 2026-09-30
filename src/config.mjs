@@ -38,7 +38,7 @@ function repositorySet(env, name) {
   const values = String(required(env, name)).split(",").map(value => value.trim()).filter(Boolean);
   const result = new Set();
   for (const value of values) {
-    if (!/^[^/\s]+\/.+[^/\s]$/.test(value)) throw new Error(`${name} contains invalid repository: ${value}`);
+    if (!/^[^/\s]+(?:\/[^/\s]+)+$/.test(value)) throw new Error(`${name} contains invalid repository: ${value}`);
     result.add(value);
   }
   if (result.size === 0) throw new Error(`${name} must contain at least one repository`);
