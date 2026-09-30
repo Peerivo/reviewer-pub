@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { collectGitLabReviewPayload, collectReviewPayload, shouldReviewGitLabMergeRequest, shouldReviewPullRequestAction, validateReviewerResponse } from "../src/reviewer.mjs";
+import { collectGitLabReviewPayload, collectGitVerseReviewPayload, collectReviewPayload, shouldReviewGitLabMergeRequest, shouldReviewGitVersePullRequest, shouldReviewPullRequestAction, validateReviewerResponse } from "../src/reviewer.mjs";
 
 const sha = char => char.repeat(40);
 
@@ -140,4 +140,71 @@ test("GitLab collector fails closed when a required text diff is missing", async
     maxWorkflows: 20,
     maxWorkflowBytes: 10000
   }), /omitted the diff/);
+});
+
+
+function mockGitverse({ missingPatch = false } = {}) {
+  return {
+    async repository() {
+      return { id: 77, full_name: "acme/widget", private: true, visibility: "private" };
+    },
+    async pullRequest() {
+      return {
+        number: 7,
+        state: "open",
+        base: { sha: sha("a"), repo: { full_name: "acme/widget" } },
+        head: { sha: sha("b"), repo: { full_name: "acme/widget" } }
+      };
+    },
+    async pullFiles() {
+      return [
+        { filename: "src/a.mjs", status: "modified", patch: missingPatch ? "" : "@@ -1 +1 @@\n-old\n+new" },
+        { filename: ".gitverse/workflows/ci.yml", status: "modified", patch: "@@ -1 +1 @@\n-old\n+new" }
+      ];
+    },
+    async commit() {
+      return { commit: { tree: { sha: sha("c") } } };
+    },
+    async tree() {
+      return ["src/a.mjs", ".gitverse/workflows/ci.yml"];
+    },
+    async fileContent(repo, path) {
+      return path.endsWith("ci.yml") ? "name: CI\non: pull_request\n" : "export const value = 2;\n";
+    }
+  };
+}
+
+test("GitVerse pull-request actions use explicit code-relevant actions but tolerate event payloads without action", () => {
+  assert.equal(shouldReviewGitVersePullRequest({ action: "opened" }), true);
+  assert.equal(shouldReviewGitVersePullRequest({ action: "synchronize" }), true);
+  assert.equal(shouldReviewGitVersePullRequest({}), true);
+  assert.equal(shouldReviewGitVersePullRequest({ action: "closed" }), false);
+});
+
+test("GitVerse collector re-fetches authoritative PR, files, tree and workflow content", async () => {
+  const payload = await collectGitVerseReviewPayload({
+    gitverse: mockGitverse(),
+    repo: "acme/widget",
+    pullNumber: 7,
+    maxFiles: 1000,
+    maxWorkflows: 20,
+    maxWorkflowBytes: 10000
+  });
+  assert.equal(payload.platform, "gitverse");
+  assert.equal(payload.repository, "acme/widget");
+  assert.equal(payload.baseSha, sha("a"));
+  assert.equal(payload.headSha, sha("b"));
+  assert.ok(payload.workflows.some(item => item.path === ".gitverse/workflows/ci.yml"));
+  assert.ok(payload.securityFiles.some(item => item.path === "src/a.mjs"));
+});
+
+test("GitVerse collector fails closed when a required text patch is missing", async () => {
+  await assert.rejects(() => collectGitVerseReviewPayload({
+    gitverse: mockGitverse({ missingPatch: true }),
+    repo: "acme/widget",
+    pullNumber: 7,
+    maxFiles: 1000,
+    maxWorkflows: 20,
+    maxWorkflowBytes: 10000
+  }), /omitted the patch/);
 });
