@@ -24,7 +24,7 @@ export function createApp({ config, fetchImpl = fetch }) {
 
   return {
     health() {
-      return { ok: true, service: "peerivo-reviewer-github-app", version: "0.3.0" };
+      return { ok: true, service: "peerivo-reviewer-github-app", version: "0.4.0" };
     },
 
     verify(rawBody, signatureHeader) {

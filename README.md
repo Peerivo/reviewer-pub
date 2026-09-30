@@ -30,24 +30,21 @@ GitHub Check Run: pass / blocking findings / fail-closed error
 
 ## GitLab integration
 
-GitLab.com and HTTPS GitLab Self-Managed are supported through the same service image.
-
-Configure a **Merge Request Hook** to:
+GitLab.com and HTTPS GitLab Self-Managed are first-class providers. New customers connect through OAuth:
 
 ```text
-POST /webhooks/gitlab
+GET /connect/gitlab
+  -> GitLab OAuth Authorization Code + PKCE
+  -> /oauth/gitlab/callback
+  -> select Maintainer/Owner projects
+  -> Reviewer provisions per-project Merge Request webhooks
 ```
 
-The server verifies the GitLab webhook secret, checks an exact repository allowlist, then re-fetches the project, merge request, paginated diffs, head tree and bounded security-relevant contents through GitLab REST API v4. It publishes the result as a `Peerivo Reviewer` commit status.
+OAuth access/refresh tokens are encrypted at rest, refreshed server-side, and never exposed to customer repositories. Each selected project has a separate random webhook secret. Incoming events resolve the exact `project.id` before Reviewer re-fetches authoritative MR, diff, tree and security-relevant contents through GitLab REST API v4.
 
-Required server-side GitLab settings:
+The previous `GITLAB_TOKEN` + `GITLAB_PROJECTS` configuration remains only as a legacy fallback for existing pilots.
 
-- `GITLAB_BASE_URL` (defaults to `https://gitlab.com`);
-- `GITLAB_TOKEN`;
-- `GITLAB_WEBHOOK_SECRET`;
-- `GITLAB_PROJECTS` — comma-separated exact `group/project` allowlist.
-
-The access token must stay only in the deployment secret store. See [`docs/GITLAB.md`](docs/GITLAB.md).
+See [`docs/GITLAB.md`](docs/GITLAB.md).
 
 ## GitHub App permissions
 
@@ -68,7 +65,7 @@ See [`docs/GITHUB_APP.md`](docs/GITHUB_APP.md).
 
 ## Runtime
 
-Node.js 22+ and no third-party npm runtime dependencies.
+Node.js 24+ and no third-party npm runtime dependencies.
 
 ```bash
 cp .env.example .env
@@ -122,7 +119,7 @@ See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Status
 
-`0.3.0` — GitHub App + GitLab webhook shell with bounded authoritative SaaS runtime security snapshot collection.
+`0.4.0` — GitHub App + self-service GitLab OAuth installation shell with bounded authoritative SaaS runtime security snapshot collection.
 
 ## License
 

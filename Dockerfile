@@ -4,7 +4,10 @@ WORKDIR /app
 COPY --chown=node:node package.json ./
 COPY --chown=node:node src ./src
 
+RUN mkdir -p /data && chown node:node /data
+
 ENV NODE_ENV=production
 USER node
+VOLUME ["/data"]
 EXPOSE 8080
 CMD ["node", "src/server.mjs"]

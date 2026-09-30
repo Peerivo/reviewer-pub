@@ -4,6 +4,11 @@ function required(env, name) {
   return value;
 }
 
+function optional(env, name) {
+  const value = String(env[name] || "").trim();
+  return value || null;
+}
+
 function integer(env, name, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   const raw = env[name];
   const value = raw === undefined || raw === "" ? fallback : Number(raw);
@@ -34,14 +39,13 @@ function optionalHttpsUrl(env, name, fallback) {
   return normalizeHttps(String(env[name] || fallback).trim(), name);
 }
 
-function repositorySet(env, name) {
-  const values = String(required(env, name)).split(",").map(value => value.trim()).filter(Boolean);
+function repositorySet(raw, name) {
+  const values = String(raw || "").split(",").map(value => value.trim()).filter(Boolean);
   const result = new Set();
   for (const value of values) {
     if (!/^[^/\s]+(?:\/[^/\s]+)+$/.test(value)) throw new Error(`${name} contains invalid repository: ${value}`);
     result.add(value);
   }
-  if (result.size === 0) throw new Error(`${name} must contain at least one repository`);
   return result;
 }
 
@@ -80,12 +84,56 @@ export function loadConfig(env = process.env) {
 }
 
 export function loadGitLabConfig(env = process.env) {
+  const gitlabToken = optional(env, "GITLAB_TOKEN");
+  const gitlabWebhookSecret = optional(env, "GITLAB_WEBHOOK_SECRET");
+  const rawProjects = optional(env, "GITLAB_PROJECTS");
+  const configured = [gitlabToken, gitlabWebhookSecret, rawProjects].filter(Boolean).length;
+  if (configured !== 0 && configured !== 3) {
+    throw new Error("legacy GitLab mode requires GITLAB_TOKEN, GITLAB_WEBHOOK_SECRET and GITLAB_PROJECTS together");
+  }
+  const gitlabProjects = repositorySet(rawProjects, "GITLAB_PROJECTS");
+  if (configured === 3 && gitlabProjects.size === 0) throw new Error("GITLAB_PROJECTS must contain at least one repository");
+
   return Object.freeze({
     ...loadServerConfig(env),
     ...reviewerConfig(env),
     gitlabBaseUrl: optionalHttpsUrl(env, "GITLAB_BASE_URL", "https://gitlab.com"),
-    gitlabToken: required(env, "GITLAB_TOKEN"),
-    gitlabWebhookSecret: required(env, "GITLAB_WEBHOOK_SECRET"),
-    gitlabProjects: repositorySet(env, "GITLAB_PROJECTS")
+    gitlabToken,
+    gitlabWebhookSecret,
+    gitlabProjects,
+    legacyEnabled: configured === 3
   });
+}
+
+export function loadGitLabOAuthConfig(env = process.env) {
+  const publicUrl = httpsUrl(env, "GITLAB_PUBLIC_URL");
+  const tokenEncryptionKey = required(env, "GITLAB_TOKEN_ENCRYPTION_KEY");
+  if (Buffer.byteLength(tokenEncryptionKey) < 32) {
+    throw new Error("GITLAB_TOKEN_ENCRYPTION_KEY must contain at least 32 bytes");
+  }
+  return Object.freeze({
+    gitlabBaseUrl: optionalHttpsUrl(env, "GITLAB_BASE_URL", "https://gitlab.com"),
+    oauthClientId: required(env, "GITLAB_OAUTH_CLIENT_ID"),
+    oauthClientSecret: required(env, "GITLAB_OAUTH_CLIENT_SECRET"),
+    oauthRedirectUri: `${publicUrl}/oauth/gitlab/callback`,
+    webhookUrl: `${publicUrl}/webhooks/gitlab`,
+    installationsDb: required(env, "GITLAB_INSTALLATIONS_DB"),
+    tokenEncryptionKey,
+    oauthStateTtlMs: integer(env, "GITLAB_OAUTH_STATE_TTL_MS", 10 * 60 * 1000, { min: 60_000, max: 60 * 60 * 1000 }),
+    installSessionTtlMs: integer(env, "GITLAB_INSTALL_SESSION_TTL_MS", 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 24 * 60 * 60 * 1000 }),
+    maxDiscoverProjects: integer(env, "GITLAB_MAX_DISCOVER_PROJECTS", 1000, { min: 1, max: 5000 }),
+    maxInstallProjects: integer(env, "GITLAB_MAX_INSTALL_PROJECTS", 100, { min: 1, max: 1000 })
+  });
+}
+
+export function loadGitLabOAuthConfigOptional(env = process.env) {
+  const names = [
+    "GITLAB_OAUTH_CLIENT_ID",
+    "GITLAB_OAUTH_CLIENT_SECRET",
+    "GITLAB_PUBLIC_URL",
+    "GITLAB_INSTALLATIONS_DB",
+    "GITLAB_TOKEN_ENCRYPTION_KEY"
+  ];
+  if (!names.some(name => String(env[name] || "").trim())) return null;
+  return loadGitLabOAuthConfig(env);
 }
