@@ -1,12 +1,12 @@
 {
   "name": "@peerivo/reviewer-github-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Public thin GitHub and GitLab integration shell for Peerivo Reviewer",
   "type": "module",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "lint": "node --check src/*.mjs && node --check tests/*.mjs",
