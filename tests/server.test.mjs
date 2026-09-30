@@ -20,7 +20,7 @@ test("landing and health start before provider credentials are provisioned", asy
   assert.deepEqual(await health.json(), {
     ok: true,
     service: "peerivo-reviewer-integrations",
-    version: "0.4.0"
+    version: "0.5.0"
   });
 
   const landing = await fetch(base);
@@ -28,6 +28,7 @@ test("landing and health start before provider credentials are provisioned", asy
   const body = await landing.text();
   assert.match(body, /Peerivo Reviewer/);
   assert.match(body, /Connect GitLab/);
+  assert.match(body, /Connect GitVerse/);
 });
 
 test("GitLab OAuth connect route fails closed before OAuth configuration exists", async (t) => {
@@ -36,6 +37,15 @@ test("GitLab OAuth connect route fails closed before OAuth configuration exists"
   t.after(() => server.close());
 
   const response = await fetch(`${base}/connect/gitlab`, { redirect: "manual" });
+  assert.equal(response.status, 503);
+});
+
+test("GitVerse OAuth connect route fails closed before OAuth configuration exists", async (t) => {
+  const server = createServer({ gitverseOAuthConfig: null });
+  const base = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${base}/connect/gitverse`, { redirect: "manual" });
   assert.equal(response.status, 503);
 });
 
