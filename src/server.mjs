@@ -1,6 +1,7 @@
 import http from "node:http";
 import { createApp } from "./app.mjs";
-import { loadConfig, loadServerConfig } from "./config.mjs";
+import { createGitLabApp } from "./gitlab-app.mjs";
+import { loadConfig, loadGitLabConfig, loadServerConfig } from "./config.mjs";
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 
@@ -43,24 +44,29 @@ function backgroundFailure(error, deliveryId) {
   process.stderr.write(`Reviewer delivery ${deliveryId || "unknown"} failed closed (${kind})\n`);
 }
 
-export function createServer({ config, fetchImpl = fetch } = {}) {
-  let app;
-  const getApp = () => {
-    if (!app) app = createApp({ config: config || loadConfig(), fetchImpl });
-    return app;
+export function createServer({ config, gitlabConfig, fetchImpl = fetch } = {}) {
+  let githubApp;
+  let gitlabApp;
+  const getGithubApp = () => {
+    if (!githubApp) githubApp = createApp({ config: config || loadConfig(), fetchImpl });
+    return githubApp;
+  };
+  const getGitLabApp = () => {
+    if (!gitlabApp) gitlabApp = createGitLabApp({ config: gitlabConfig || loadGitLabConfig(), fetchImpl });
+    return gitlabApp;
   };
 
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
       if (req.method === "GET" && url.pathname === "/healthz") {
-        return json(res, 200, { ok: true, service: "peerivo-reviewer-github-app", version: "0.1.0" });
+        return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.3.0" });
       }
       if (req.method === "GET" && url.pathname === "/") {
-        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}</style><h1>Peerivo Reviewer</h1><p>GitHub App shell for pull-request security review. The app reads bounded repository metadata, never executes reviewed project code, and publishes a GitHub Check Run.</p><p>Webhook endpoint: <code>/webhooks/github</code></p>`);
+        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub and GitLab pull/merge-request security review. It reads bounded repository metadata, never executes reviewed project code, and publishes provider-native status.</p><p>Webhooks: <code>/webhooks/github</code> and <code>/webhooks/gitlab</code></p>`);
       }
       if (req.method === "POST" && url.pathname === "/webhooks/github") {
-        const runtime = getApp();
+        const runtime = getGithubApp();
         const rawBody = await readBody(req);
         if (!runtime.verify(rawBody, req.headers["x-hub-signature-256"])) {
           return json(res, 401, { ok: false, error: "invalid webhook signature" });
@@ -85,6 +91,38 @@ export function createServer({ config, fetchImpl = fetch } = {}) {
 
         return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
       }
+      if (req.method === "POST" && url.pathname === "/webhooks/gitlab") {
+        const runtime = getGitLabApp();
+        const rawBody = await readBody(req);
+        if (!runtime.verify(req.headers["x-gitlab-token"])) {
+          return json(res, 401, { ok: false, error: "invalid webhook token" });
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(rawBody.toString("utf8"));
+        } catch {
+          return json(res, 400, { ok: false, error: "invalid JSON" });
+        }
+
+        const event = String(req.headers["x-gitlab-event"] || "");
+        const deliveryId = String(
+          req.headers["webhook-id"]
+          || req.headers["x-gitlab-webhook-uuid"]
+          || req.headers["idempotency-key"]
+          || ""
+        );
+        if (event !== "Merge Request Hook") {
+          return json(res, 202, { ok: true, accepted: false, reason: "event_not_used" });
+        }
+
+        Promise.resolve()
+          .then(() => runtime.handleWebhook({ event, deliveryId, payload }))
+          .catch(error => backgroundFailure(error, deliveryId));
+
+        return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
+      }
+
       return json(res, 404, { ok: false, error: "not found" });
     } catch (error) {
       const status = Number.isSafeInteger(error?.status) ? error.status : 503;
@@ -100,10 +138,10 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     const serverConfig = loadServerConfig();
     const server = createServer();
     server.listen(serverConfig.port, serverConfig.host, () => {
-      process.stdout.write(`Peerivo Reviewer GitHub App listening on ${serverConfig.host}:${serverConfig.port}\n`);
+      process.stdout.write(`Peerivo Reviewer integrations listening on ${serverConfig.host}:${serverConfig.port}\n`);
     });
   } catch (error) {
-    process.stderr.write(`Peerivo Reviewer GitHub App failed to start: ${error?.stack || error}\n`);
+    process.stderr.write(`Peerivo Reviewer integrations failed to start: ${error?.stack || error}\n`);
     process.exitCode = 2;
   }
 }

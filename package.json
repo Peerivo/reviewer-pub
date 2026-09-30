@@ -1,8 +1,8 @@
 {
   "name": "@peerivo/reviewer-github-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Public thin GitHub App shell for Peerivo Reviewer",
+  "description": "Public thin GitHub and GitLab integration shell for Peerivo Reviewer",
   "type": "module",
   "license": "UNLICENSED",
   "engines": {

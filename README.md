@@ -1,10 +1,10 @@
-# Peerivo Reviewer — GitHub App
+# Peerivo Reviewer — GitHub + GitLab integrations
 
-Public, source-transparent GitHub App shell for **Peerivo Reviewer**.
+Public, source-transparent GitHub/GitLab integration shell for **Peerivo Reviewer**.
 
 Reviewer checks the security boundary of pull requests — CI authority, secrets, supply-chain references, caches, migrations and fail-open security logic — without executing the reviewed project's build, tests, install scripts or application code.
 
-This repository contains only the GitHub integration layer. The proprietary detection engine is hosted separately and is not distributed to customer repositories.
+This repository contains only provider integration layers. The proprietary detection engine is hosted separately and is not distributed to customer repositories.
 
 ## What gets installed
 
@@ -27,6 +27,27 @@ Peerivo Reviewer API (private engine)
         v
 GitHub Check Run: pass / blocking findings / fail-closed error
 ```
+
+## GitLab integration
+
+GitLab.com and HTTPS GitLab Self-Managed are supported through the same service image.
+
+Configure a **Merge Request Hook** to:
+
+```text
+POST /webhooks/gitlab
+```
+
+The server verifies the GitLab webhook secret, checks an exact repository allowlist, then re-fetches the project, merge request, paginated diffs, head tree and bounded security-relevant contents through GitLab REST API v4. It publishes the result as a `Peerivo Reviewer` commit status.
+
+Required server-side GitLab settings:
+
+- `GITLAB_BASE_URL` (defaults to `https://gitlab.com`);
+- `GITLAB_TOKEN`;
+- `GITLAB_WEBHOOK_SECRET`;
+- `GITLAB_PROJECTS` — comma-separated exact `group/project` allowlist.
+
+The access token must stay only in the deployment secret store. See [`docs/GITLAB.md`](docs/GITLAB.md).
 
 ## GitHub App permissions
 
@@ -55,10 +76,11 @@ npm run check
 npm start
 ```
 
-Webhook endpoint:
+Webhook endpoints:
 
 ```text
 POST /webhooks/github
+POST /webhooks/gitlab
 ```
 
 Health endpoint:
@@ -100,7 +122,7 @@ See [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Status
 
-`0.2.0` — GitHub App shell with bounded SaaS runtime security snapshot collection for external pilot.
+`0.3.0` — GitHub App + GitLab webhook shell with bounded authoritative SaaS runtime security snapshot collection.
 
 ## License
 

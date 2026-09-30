@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { createAppJwt, verifyWebhookSignature } from "../src/crypto.mjs";
+import { createAppJwt, verifySharedSecret, verifyWebhookSignature } from "../src/crypto.mjs";
 
 const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
 
@@ -23,4 +23,10 @@ test("webhook HMAC accepts exact raw bytes and rejects tampering", () => {
   assert.equal(verifyWebhookSignature({ secret, rawBody, signatureHeader }), true);
   assert.equal(verifyWebhookSignature({ secret, rawBody: Buffer.from('{"hello":"tampered"}'), signatureHeader }), false);
   assert.equal(verifyWebhookSignature({ secret, rawBody, signatureHeader: "bad" }), false);
+});
+
+test("GitLab shared webhook secret comparison is exact", () => {
+  assert.equal(verifySharedSecret({ secret: "secret", supplied: "secret" }), true);
+  assert.equal(verifySharedSecret({ secret: "secret", supplied: "Secret" }), false);
+  assert.equal(verifySharedSecret({ secret: "secret", supplied: "" }), false);
 });
