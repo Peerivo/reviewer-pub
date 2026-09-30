@@ -27,3 +27,10 @@ export function verifyWebhookSignature({ secret, rawBody, signatureHeader }) {
   const supplied = Buffer.from(suppliedHex, "hex");
   return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
+
+export function verifySharedSecret({ secret, supplied }) {
+  if (typeof secret !== "string" || !secret || typeof supplied !== "string" || !supplied) return false;
+  const expected = crypto.createHash("sha256").update(secret).digest();
+  const actual = crypto.createHash("sha256").update(supplied).digest();
+  return crypto.timingSafeEqual(expected, actual);
+}
