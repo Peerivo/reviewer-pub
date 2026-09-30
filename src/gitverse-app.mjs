@@ -7,25 +7,16 @@ function truncate(value, max = 50000) {
   return text.length <= max ? text : text.slice(0, max) + "\n\n…truncated";
 }
 
-function webhookIdentity(payload) {
-  const repository = payload?.repository || payload?.repo;
-  const repositoryId = repository?.id;
-  const fullName = repository?.full_name || repository?.fullName;
+function webhookPullNumber(payload) {
   const pullNumber = payload?.pull_request?.number
     ?? payload?.pullRequest?.number
     ?? payload?.number
     ?? payload?.issue?.number;
 
-  if (!Number.isSafeInteger(repositoryId) || repositoryId < 1) {
-    throw Object.assign(new Error("webhook is missing repository.id"), { status: 400 });
-  }
-  if (typeof fullName !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(fullName)) {
-    throw Object.assign(new Error("webhook is missing repository.full_name"), { status: 400 });
-  }
   if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) {
     throw Object.assign(new Error("webhook is missing pull request number"), { status: 400 });
   }
-  return { repositoryId, fullName, pullNumber };
+  return pullNumber;
 }
 
 async function upsertComment(gitverse, repo, pullNumber, body) {
@@ -77,21 +68,20 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
   if (!selfService) throw new Error("GitVerse self-service runtime is required");
 
   return {
-    authenticateWebhook({ authorizationHeader, payload }) {
-      const identity = webhookIdentity(payload);
+    authenticateWebhook({ repositoryId, authorizationHeader }) {
       const connected = selfService.authenticateRepositoryWebhook({
-        repositoryId: identity.repositoryId,
-        fullName: identity.fullName,
+        repositoryId,
         authorizationHeader
       });
       if (!connected) throw Object.assign(new Error("GitVerse repository is not enabled for Reviewer"), { status: 403 });
-      return { ...identity, ...connected };
+      return connected;
     },
 
-    async handleWebhook({ deliveryId = "", payload, authContext = null, authorizationHeader = "" }) {
+    async handleWebhook({ deliveryId = "", payload, authContext = null, authorizationHeader = "", repositoryId = null }) {
       if (!shouldReviewGitVersePullRequest(payload)) return { accepted: false, reason: "action_not_used" };
-      const authenticated = authContext || this.authenticateWebhook({ authorizationHeader, payload });
-      const { repositoryId, fullName: repo, pullNumber } = authenticated;
+      const authenticated = authContext || this.authenticateWebhook({ repositoryId, authorizationHeader });
+      const pullNumber = webhookPullNumber(payload);
+      const { repositoryId: installedRepositoryId, fullName: repo } = authenticated;
       const gitverse = await selfService.gitverseForInstallation(authenticated.installationId);
 
       const pr = await gitverse.pullRequest(repo, pullNumber);
@@ -121,7 +111,7 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
           apiUrl: config.reviewerApiUrl,
           apiToken: config.reviewerApiToken,
           payload: reviewPayload,
-          gitverseRepositoryId: repositoryId,
+          gitverseRepositoryId: installedRepositoryId,
           gitverseDeliveryId: deliveryId,
           timeoutMs: config.reviewTimeoutMs,
           fetchImpl
