@@ -2,43 +2,73 @@ import { verifySharedSecret } from "./crypto.mjs";
 import { GitLabClient } from "./gitlab.mjs";
 import { collectGitLabReviewPayload, shouldReviewGitLabMergeRequest, submitReview } from "./reviewer.mjs";
 
-function requiredWebhookIdentity(payload, allowedProjects) {
+function requiredWebhookIdentity(payload) {
   const projectId = payload?.project?.id;
   const repo = payload?.project?.path_with_namespace;
   const pullNumber = payload?.object_attributes?.iid;
   const targetProjectId = payload?.object_attributes?.target_project_id;
 
-  if (!Number.isSafeInteger(projectId) || projectId < 1) throw new Error("webhook is missing project.id");
-  if (typeof repo !== "string" || !/^[^/\s]+(?:\/[^/\s]+)+$/.test(repo)) throw new Error("webhook is missing project.path_with_namespace");
-  if (!allowedProjects.has(repo)) throw Object.assign(new Error("GitLab project is not enabled for Reviewer"), { status: 403 });
-  if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) throw new Error("webhook is missing merge request iid");
-  if (targetProjectId !== undefined && targetProjectId !== projectId) throw new Error("webhook target project mismatch");
+  if (!Number.isSafeInteger(projectId) || projectId < 1) throw Object.assign(new Error("webhook is missing project.id"), { status: 400 });
+  if (typeof repo !== "string" || !/^[^/\s]+(?:\/[^/\s]+)+$/.test(repo)) {
+    throw Object.assign(new Error("webhook is missing project.path_with_namespace"), { status: 400 });
+  }
+  if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) throw Object.assign(new Error("webhook is missing merge request iid"), { status: 400 });
+  if (targetProjectId !== undefined && targetProjectId !== projectId) {
+    throw Object.assign(new Error("webhook target project mismatch"), { status: 400 });
+  }
 
   return { projectId, repo, pullNumber };
 }
 
-export function createGitLabApp({ config, fetchImpl = fetch }) {
-  const gitlab = new GitLabClient({
-    baseUrl: config.gitlabBaseUrl,
-    token: config.gitlabToken,
-    fetchImpl
-  });
+export function createGitLabApp({ config, selfService = null, fetchImpl = fetch }) {
+  function legacyClient() {
+    if (!config.legacyEnabled || !config.gitlabToken) {
+      throw Object.assign(new Error("GitLab project is not enabled for Reviewer"), { status: 403 });
+    }
+    return new GitLabClient({
+      baseUrl: config.gitlabBaseUrl,
+      token: config.gitlabToken,
+      fetchImpl
+    });
+  }
 
   return {
-    verify(tokenHeader) {
-      return verifySharedSecret({
+    authenticateWebhook({ tokenHeader, payload }) {
+      const identity = requiredWebhookIdentity(payload);
+
+      if (selfService) {
+        const connected = selfService.authenticateProjectWebhook({
+          projectId: identity.projectId,
+          repo: identity.repo,
+          tokenHeader
+        });
+        if (connected) return { ...identity, ...connected };
+      }
+
+      if (!config.legacyEnabled || !config.gitlabProjects.has(identity.repo)) {
+        throw Object.assign(new Error("GitLab project is not enabled for Reviewer"), { status: 403 });
+      }
+      if (!verifySharedSecret({
         secret: config.gitlabWebhookSecret,
         supplied: typeof tokenHeader === "string" ? tokenHeader : ""
-      });
+      })) {
+        throw Object.assign(new Error("invalid webhook token"), { status: 401 });
+      }
+      return { ...identity, source: "legacy" };
     },
 
-    async handleWebhook({ event, deliveryId, payload }) {
+    async handleWebhook({ event, deliveryId, payload, authContext = null, tokenHeader = "" }) {
       if (event !== "Merge Request Hook" || payload?.object_kind !== "merge_request") {
         return { accepted: false, reason: "event_not_used" };
       }
       if (!shouldReviewGitLabMergeRequest(payload)) return { accepted: false, reason: "action_not_used" };
 
-      const { projectId, repo, pullNumber } = requiredWebhookIdentity(payload, config.gitlabProjects);
+      const authenticated = authContext || this.authenticateWebhook({ tokenHeader, payload });
+      const { projectId, repo, pullNumber } = authenticated;
+      const gitlab = authenticated.source === "oauth"
+        ? await selfService.gitlabForInstallation(authenticated.installationId)
+        : legacyClient();
+
       const mr = await gitlab.mergeRequest(repo, pullNumber);
       if (mr?.target_project_id !== projectId) throw new Error("GitLab merge request target project mismatch");
       const headSha = mr?.diff_refs?.head_sha;
