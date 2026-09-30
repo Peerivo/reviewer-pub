@@ -161,10 +161,11 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
         const authorizationHeader = `Bearer ${webhookSecret}`;
         const hooks = await gitverse.listWebhooks(fullName);
         const hook = hooks.find(item => item?.id === existing?.webhookId)
-          || hooks.find(item => item?.config?.url === config.webhookUrl);
+          || hooks.find(item => item?.config?.url === `${config.webhookUrl}/${id}`);
+        const webhookUrl = `${config.webhookUrl}/${id}`;
         const saved = hook
-          ? await gitverse.updateWebhook(fullName, hook.id, { url: config.webhookUrl, authorizationHeader })
-          : await gitverse.createWebhook(fullName, { url: config.webhookUrl, authorizationHeader });
+          ? await gitverse.updateWebhook(fullName, hook.id, { url: webhookUrl, authorizationHeader })
+          : await gitverse.createWebhook(fullName, { url: webhookUrl, authorizationHeader });
         if (!Number.isSafeInteger(saved?.id) || saved.id < 1) throw new Error("GitVerse returned invalid webhook id");
         installationStore.upsertRepository({
           repositoryId: id,
@@ -179,13 +180,10 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       return { installed, removed, selectedCount: selectedIds.length };
     },
 
-    authenticateRepositoryWebhook({ repositoryId: rawRepositoryId, fullName, authorizationHeader }) {
+    authenticateRepositoryWebhook({ repositoryId: rawRepositoryId, authorizationHeader }) {
       const id = repositoryId(rawRepositoryId);
       const record = installationStore.getRepository(id);
       if (!record) return null;
-      if (record.fullName !== repositoryIdentity(fullName)) {
-        throw Object.assign(new Error("GitVerse webhook repository identity mismatch"), { status: 403 });
-      }
       const expected = `Bearer ${record.webhookSecret}`;
       if (!secureEqual(expected, String(authorizationHeader || ""))) {
         throw Object.assign(new Error("invalid webhook authorization"), { status: 401 });
