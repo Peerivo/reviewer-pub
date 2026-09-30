@@ -81,8 +81,7 @@ export class GitLabClient {
   async tree(project, sha, { maxFiles }) {
     const ref = fullSha(sha, "tree ref");
     const result = [];
-    const pages = Math.ceil(maxFiles / 100) + 1;
-    for (let page = 1; page <= pages; page += 1) {
+    for (let page = 1; page <= 2000; page += 1) {
       const batch = await this.request(
         `/projects/${projectId(project)}/repository/tree?recursive=true&ref=${encodeURIComponent(ref)}&per_page=100&page=${page}`
       );
