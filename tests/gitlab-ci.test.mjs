@@ -87,8 +87,8 @@ test("GitLab Free CI bridge validates job identity and returns Reviewer result",
       assert.equal(options.headers["job-token"], "ci-job-token");
       return Response.json({
         id: 123,
-        project: { id: 7 },
-        pipeline: { id: 99 },
+        project: { ci_job_token_scope_enabled: false },
+        pipeline: { id: 99, project_id: 7 },
         commit: { id: sha }
       });
     }
@@ -137,8 +137,8 @@ test("GitLab Free CI bridge fails closed when job identity mismatches", async ()
     if (url.pathname === "/api/v4/job") {
       return Response.json({
         id: 999,
-        project: { id: 7 },
-        pipeline: { id: 99 },
+        project: { ci_job_token_scope_enabled: false },
+        pipeline: { id: 99, project_id: 7 },
         commit: { id: sha }
       });
     }
