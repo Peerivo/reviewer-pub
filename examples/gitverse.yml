@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PEERIVO_REVIEWER_API: https://api.reviewer.peerivo.net
-      PEERIVO_REVIEWER_CLIENT_URL: https://raw.githubusercontent.com/Peerivo/reviewer-pub/a6607c58d9a40c1540390d0f0d31b0958b0f0ae6/clients/remote-reviewer.mjs
-      PEERIVO_REVIEWER_CLIENT_SHA256: bd5050b1003a3e8cf50e736ff18a01363bbd161c83580bb25b067a98ab89e1b4
+      PEERIVO_REVIEWER_CLIENT_URL: https://raw.githubusercontent.com/Peerivo/reviewer-pub/88bb9f02ca19bac301064fb5532e5aef7db968dd/clients/remote-reviewer.mjs
+      PEERIVO_REVIEWER_CLIENT_SHA256: dae4b2f44572678525b92821a625f5da563e991f32c05a7f67ed57ba2bc9a33f
       PEERIVO_LICENSE: ${{ secrets.PEERIVO_LICENSE }}
       PEERIVO_BASE_REF: ${{ github.event.pull_request.base.sha }}
       PEERIVO_PULL_REQUEST: ${{ github.event.pull_request.number }}
