@@ -10,7 +10,7 @@ function truncate(text, max = 60000) {
   return value.length <= max ? value : `${value.slice(0, max)}\n\n…truncated`;
 }
 
-async function upsertConversationCard({ github, repo, pullNumber, token, appId, body }) {
+export async function upsertConversationCard({ github, repo, pullNumber, token, appId, body }) {
   const comments = await github.listIssueComments(repo, pullNumber, token);
   const expectedAppId = Number(appId);
   const existing = comments.find(comment => {
