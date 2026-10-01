@@ -58,7 +58,11 @@ function normalizeToken(body, clock, { requireScopes = false } = {}) {
     accessToken,
     refreshToken,
     tokenExpiresAt: Math.floor(clock() + expiresIn * 1000),
-    scopes: requireScopes ? assertScopes(body?.scope) : [...parseScopes(body?.scope)].sort()
+    scopes: (() => {
+      const reported = body?.scope ?? body?.scopes;
+      if (reported === undefined || reported === null || String(reported).trim() === "") return [];
+      return requireScopes ? assertScopes(reported) : [...parseScopes(reported)].sort();
+    })()
   };
 }
 

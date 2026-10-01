@@ -94,3 +94,37 @@ test("GitVerse OAuth treats write:user as satisfying read:user", async () => {
   const token = await client.exchangeCode({ code: "gta_code", verifier: "v".repeat(64) });
   assert.deepEqual(token.scopes, ["write:repository", "write:user"]);
 });
+
+
+test("GitVerse OAuth accepts omitted scope field and defers capability proof to API calls", async () => {
+  const client = new GitVerseOAuthClient({
+    webBaseUrl: "https://gitverse.ru",
+    clientId: "client-id",
+    clientSecret: "client-secret",
+    redirectUri: "https://reviewer.example.com/oauth/gitverse/callback",
+    fetchImpl: async () => Response.json({
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 3600
+    })
+  });
+  const token = await client.exchangeCode({ code: "gta_code", verifier: "v".repeat(64) });
+  assert.deepEqual(token.scopes, []);
+});
+
+test("GitVerse OAuth accepts scopes array variant", async () => {
+  const client = new GitVerseOAuthClient({
+    webBaseUrl: "https://gitverse.ru",
+    clientId: "client-id",
+    clientSecret: "client-secret",
+    redirectUri: "https://reviewer.example.com/oauth/gitverse/callback",
+    fetchImpl: async () => Response.json({
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 3600,
+      scopes: ["read:user", "write:repository"]
+    })
+  });
+  const token = await client.exchangeCode({ code: "gta_code", verifier: "v".repeat(64) });
+  assert.deepEqual(token.scopes, ["read:user", "write:repository"]);
+});

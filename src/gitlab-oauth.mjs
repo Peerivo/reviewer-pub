@@ -69,15 +69,13 @@ export class GitLabOAuthClient {
     this.clock = clock;
   }
 
-  authorizeUrl({ state, codeChallenge }) {
+  authorizeUrl({ state }) {
     const url = new URL("/oauth/authorize", this.baseUrl);
     url.searchParams.set("client_id", this.clientId);
     url.searchParams.set("redirect_uri", this.redirectUri);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("state", String(state));
     url.searchParams.set("scope", "api");
-    url.searchParams.set("code_challenge", String(codeChallenge));
-    url.searchParams.set("code_challenge_method", "S256");
     return url.toString();
   }
 
@@ -95,14 +93,14 @@ export class GitLabOAuthClient {
     return normalizeToken(await jsonResponse(response, label), this.clock);
   }
 
-  exchangeCode({ code, verifier }) {
+  exchangeCode({ code }) {
     if (!code) throw new GitLabOAuthError("GitLab OAuth callback is missing code", 400);
     return this.tokenRequest({
       client_id: this.clientId,
+      client_secret: this.clientSecret,
       code: String(code),
       grant_type: "authorization_code",
-      redirect_uri: this.redirectUri,
-      code_verifier: String(verifier)
+      redirect_uri: this.redirectUri
     }, "GitLab OAuth token exchange");
   }
 
@@ -110,6 +108,7 @@ export class GitLabOAuthClient {
     if (!refreshToken) throw new GitLabOAuthError("GitLab OAuth refresh token is missing", 401);
     return this.tokenRequest({
       client_id: this.clientId,
+      client_secret: this.clientSecret,
       refresh_token: String(refreshToken),
       grant_type: "refresh_token",
       redirect_uri: this.redirectUri
