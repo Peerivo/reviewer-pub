@@ -109,6 +109,42 @@ export class GitHubClient {
     return bytes.toString("utf8");
   }
 
+
+  async listIssueComments(repo, issueNumber, token, { maxComments = 500 } = {}) {
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new GitHubError("invalid issue number", 400);
+    const comments = [];
+    for (let page = 1; page <= Math.ceil(maxComments / 100) + 1; page += 1) {
+      const batch = await this.request(
+        `/repos/${encodeRepo(repo)}/issues/${issueNumber}/comments?per_page=100&page=${page}`,
+        { token }
+      );
+      if (!Array.isArray(batch)) throw new GitHubError("GitHub issue comments response was not an array", 502);
+      comments.push(...batch);
+      if (comments.length > maxComments) throw new GitHubError("GitHub issue has too many comments", 422);
+      if (batch.length < 100) return comments;
+    }
+    throw new GitHubError("GitHub issue comment pagination exceeded safe bound", 422);
+  }
+
+  async createIssueComment(repo, issueNumber, token, body) {
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1) throw new GitHubError("invalid issue number", 400);
+    return this.request(`/repos/${encodeRepo(repo)}/issues/${issueNumber}/comments`, {
+      method: "POST",
+      token,
+      body: { body: String(body) }
+    });
+  }
+
+  async updateIssueComment(repo, commentId, token, body) {
+    const id = Number(commentId);
+    if (!Number.isSafeInteger(id) || id < 1) throw new GitHubError("invalid comment id", 400);
+    return this.request(`/repos/${encodeRepo(repo)}/issues/comments/${id}`, {
+      method: "PATCH",
+      token,
+      body: { body: String(body) }
+    });
+  }
+
   async createCheck(repo, token, body) {
     return this.request(`/repos/${encodeRepo(repo)}/check-runs`, { method: "POST", token, body });
   }
