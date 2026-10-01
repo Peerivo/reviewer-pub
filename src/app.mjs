@@ -3,10 +3,34 @@ import { GitHubClient } from "./github.mjs";
 import { collectReviewPayload, shouldReviewPullRequestAction, submitReview } from "./reviewer.mjs";
 
 const CHECK_NAME = "Security review";
+const COMMENT_MARKER = "<!-- peerivo-reviewer-card -->";
 
 function truncate(text, max = 60000) {
   const value = String(text || "");
   return value.length <= max ? value : `${value.slice(0, max)}\n\n…truncated`;
+}
+
+async function upsertConversationCard({ github, repo, pullNumber, token, appId, body }) {
+  const comments = await github.listIssueComments(repo, pullNumber, token);
+  const expectedAppId = Number(appId);
+  const existing = comments.find(comment => {
+    if (typeof comment?.body !== "string" || !comment.body.includes(COMMENT_MARKER)) return false;
+    if (Number(comment?.performed_via_github_app?.id) === expectedAppId) return true;
+    return comment?.user?.type === "Bot" && comment?.user?.login === "peerivo-reviewer[bot]";
+  });
+  const card = `${COMMENT_MARKER}\n${truncate(body)}`;
+  return existing
+    ? github.updateIssueComment(repo, existing.id, token, card)
+    : github.createIssueComment(repo, pullNumber, token, card);
+}
+
+async function bestEffortConversationCard(args) {
+  try {
+    return await upsertConversationCard(args);
+  } catch (error) {
+    process.stderr.write(`Peerivo Reviewer conversation card update failed (${error?.status || error?.name || "Error"})\n`);
+    return null;
+  }
 }
 
 function requiredWebhookIdentity(payload) {
@@ -59,6 +83,20 @@ export function createApp({ config, fetchImpl = fetch }) {
       const checkId = check?.id;
       if (!Number.isSafeInteger(checkId) || checkId < 1) throw new Error("GitHub did not return a check run id");
 
+      await bestEffortConversationCard({
+        github,
+        repo,
+        pullNumber,
+        token,
+        appId: config.githubAppId,
+        body: [
+          "> [!NOTE]",
+          "> **Review in progress** — security analysis is running.",
+          "",
+          "The report will update automatically when the review completes."
+        ].join("\n")
+      });
+
       try {
         const reviewPayload = await collectReviewPayload({
           github,
@@ -93,21 +131,38 @@ export function createApp({ config, fetchImpl = fetch }) {
             summary: truncate(review.report)
           }
         });
+        await bestEffortConversationCard({
+          github,
+          repo,
+          pullNumber,
+          token,
+          appId: config.githubAppId,
+          body: review.report
+        });
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
       } catch (error) {
+        const failedClosedReport = [
+          "> [!WARNING]",
+          "> **Review failed closed** — complete coverage could not be proven.",
+          "",
+          String(error?.message || error)
+        ].join("\n");
         await github.updateCheck(repo, checkId, token, {
           status: "completed",
           conclusion: "failure",
           completed_at: new Date().toISOString(),
           output: {
             title: "⚠️ Failed closed",
-            summary: truncate([
-              "> [!WARNING]",
-              "> **Review failed closed** — complete coverage could not be proven.",
-              "",
-              String(error?.message || error)
-            ].join("\n"))
+            summary: truncate(failedClosedReport)
           }
+        });
+        await bestEffortConversationCard({
+          github,
+          repo,
+          pullNumber,
+          token,
+          appId: config.githubAppId,
+          body: failedClosedReport
         });
         throw error;
       }
