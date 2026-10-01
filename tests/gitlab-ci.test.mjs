@@ -202,8 +202,8 @@ test("GitLab console PASS report stays compact and strips Markdown details", () 
   assert.match(output, /Findings: 0/);
   assert.match(output, /Files reviewed: 2/);
   assert.match(output, /Merge request: triombus\/test !1/);
-  assert.match(output, /✓ CI \/ supply chain/);
-  assert.match(output, /✓ Secrets/);
+  assert.match(output, /\u001b\[32m✓\u001b\[0m CI \/ supply chain/);
+  assert.match(output, /\u001b\[32m✓\u001b\[0m Secrets/);
   assert.match(output, /Review ID: review-pass/);
   assert.doesNotMatch(output, /<details>/);
   assert.doesNotMatch(output, /### Result/);
@@ -234,8 +234,8 @@ test("GitLab console BLOCKED report prints concise findings", () => {
 
   assert.match(output, /Peerivo Reviewer — BLOCKED/);
   assert.match(output, /Findings: 2/);
-  assert.match(output, /✗ CI \/ supply chain \(2 findings\)/);
-  assert.match(output, /✓ Secrets/);
+  assert.match(output, /\u001b\[31m✗\u001b\[0m CI \/ supply chain \(2 findings\)/);
+  assert.match(output, /\u001b\[32m✓\u001b\[0m Secrets/);
   assert.match(output, /\[HIGH\] CI-004 Third-party Action is not pinned — \.gitlab-ci\.yml/);
   assert.match(output, /\[HIGH\] SUPPLY-001 Remote content is piped to a shell — \.gitlab-ci\.yml/);
 });
