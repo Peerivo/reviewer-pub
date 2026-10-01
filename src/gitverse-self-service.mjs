@@ -180,6 +180,91 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       return { installed, removed, selectedCount: selectedIds.length };
     },
 
+    async repairRepository({ fullName, branches = [], workflowPath = "", workflowContent = "", touchPath = "", touchContent = "" } = {}) {
+      const repositoryName = repositoryIdentity(fullName);
+      const owner = repositoryName.split("/")[0];
+      const installation = installationStore.getRepositoryByFullName(repositoryName)?.installationId
+        ? installationStore.getInstallation(installationStore.getRepositoryByFullName(repositoryName).installationId)
+        : installationStore.findInstallationByLogin(owner);
+      if (!installation) throw Object.assign(new Error("GitVerse OAuth installation not found for repair"), { status: 404 });
+
+      const { installation: fresh, gitverse } = await installationClient(installation);
+      const repository = await gitverse.repository(repositoryName);
+      if (!Number.isSafeInteger(repository?.id) || repository.id < 1 || repository?.permissions?.admin !== true) {
+        throw Object.assign(new Error("GitVerse repository is not admin-manageable for repair"), { status: 403 });
+      }
+
+      const id = repository.id;
+      const existing = installationStore.getRepository(id);
+      const webhookSecret = existing?.webhookSecret || `pvrwh_${crypto.randomBytes(32).toString("base64url")}`;
+      const authorizationHeader = `Bearer ${webhookSecret}`;
+      const webhookUrl = `${config.webhookUrl}/${id}`;
+      const hooks = await gitverse.listWebhooks(repositoryName);
+      const hook = hooks.find(item => item?.id === existing?.webhookId)
+        || hooks.find(item => item?.config?.url === webhookUrl);
+      const saved = hook
+        ? await gitverse.updateWebhook(repositoryName, hook.id, { url: webhookUrl, authorizationHeader })
+        : await gitverse.createWebhook(repositoryName, { url: webhookUrl, authorizationHeader });
+      if (!Number.isSafeInteger(saved?.id) || saved.id < 1) throw new Error("GitVerse returned invalid webhook id during repair");
+      installationStore.upsertRepository({
+        repositoryId: id,
+        installationId: fresh.id,
+        fullName: repositoryName,
+        webhookId: saved.id,
+        webhookSecret
+      });
+
+      const updatedBranches = [];
+      for (const branch of branches) {
+        const branchName = String(branch || "").trim();
+        if (!branchName || !workflowPath) continue;
+        let current = null;
+        try {
+          current = await gitverse.contentEntry(repositoryName, workflowPath, branchName);
+        } catch (error) {
+          if (!(error instanceof GitVerseError) || error.status !== 404) throw error;
+        }
+        const currentText = current?.encoding === "base64" && typeof current?.content === "string"
+          ? Buffer.from(current.content.replace(/\s+/g, ""), "base64").toString("utf8")
+          : "";
+        if (currentText !== workflowContent) {
+          await gitverse.putFile(repositoryName, workflowPath, {
+            branch: branchName,
+            content: workflowContent,
+            message: "chore: repair Peerivo Reviewer GitVerse workflow",
+            sha: current?.sha || ""
+          });
+          updatedBranches.push(branchName);
+        }
+      }
+
+      if (touchPath && touchContent && branches.length > 1) {
+        const branchName = String(branches[branches.length - 1] || "").trim();
+        let current = null;
+        try {
+          current = await gitverse.contentEntry(repositoryName, touchPath, branchName);
+        } catch (error) {
+          if (!(error instanceof GitVerseError) || error.status !== 404) throw error;
+        }
+        await gitverse.putFile(repositoryName, touchPath, {
+          branch: branchName,
+          content: touchContent,
+          message: "chore: retrigger Peerivo Reviewer GitVerse E2E",
+          sha: current?.sha || ""
+        });
+        updatedBranches.push(branchName + ":trigger");
+      }
+
+      return {
+        repositoryId: id,
+        fullName: repositoryName,
+        webhookId: saved.id,
+        webhookEvents: saved.events || [],
+        webhookLastResponseStatus: saved.last_response_status || "",
+        updatedBranches
+      };
+    },
+
     authenticateRepositoryWebhook({ repositoryId: rawRepositoryId, authorizationHeader }) {
       const id = repositoryId(rawRepositoryId);
       const record = installationStore.getRepository(id);
