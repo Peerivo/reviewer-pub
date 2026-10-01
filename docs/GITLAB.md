@@ -133,16 +133,25 @@ stages:
         "sha": "\${CI_COMMIT_SHA}"
       }
       JSON
-      curl --fail-with-body --silent --show-error \\
+      STATUS="$(curl --silent --show-error \\
+        --output /tmp/peerivo-review.txt \\
+        --write-out "%{http_code}" \\
         --request POST \\
         --header "JOB-TOKEN: \${CI_JOB_TOKEN}" \\
         --header "Content-Type: application/json" \\
         --data-binary @/tmp/peerivo-review.json \\
-        "https://pub.reviewer.peerivo.net/v1/ci/gitlab/review"
+        "https://pub.reviewer.peerivo.net/v1/ci/gitlab/review")"
+
+      cat /tmp/peerivo-review.txt
+
+      if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+        exit 0
+      fi
+      exit 1
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 \`\`\`
 
 The job runs on Free/Premium/Ultimate. It does not execute the reviewed project's build, install scripts, tests or application code. The endpoint validates the ephemeral GitLab \`CI_JOB_TOKEN\` through GitLab's current-job API, verifies project/job/pipeline/SHA/MR identity against the connected Reviewer installation, then submits the same bounded authoritative review payload to the private Reviewer engine.
 
-A PASS returns HTTP 200 and the report in the job trace. A blocking review returns HTTP 422, so \`curl --fail-with-body\` makes the GitLab job fail while preserving the Reviewer report in the trace. No additional customer secret is required beyond GitLab's built-in \`CI_JOB_TOKEN\`.
+A PASS returns HTTP 200 and the report in the job trace. A blocking review returns HTTP 422. The example captures the HTTP status separately, prints the complete Reviewer report first, then exits non-zero so GitLab marks the job failed without interleaving a noisy `curl: (22)` line. No additional customer secret is required beyond GitLab's built-in `CI_JOB_TOKEN`.
