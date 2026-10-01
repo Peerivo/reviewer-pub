@@ -526,8 +526,30 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
           workflowContent: GITVERSE_REVIEWER_WORKFLOW,
           touchPath: ".reviewer/gitverse-repair.txt",
           touchContent: touchContent ? touchContent + "\n" : ""
-        }).then(result => {
+        }).then(async result => {
           process.stdout.write(`GitVerse repair completed: ${JSON.stringify(result)}\n`);
+
+          const pullNumber = Number(process.env.GITVERSE_REPAIR_PULL || "");
+          if (Number.isSafeInteger(pullNumber) && pullNumber > 0) {
+            const record = gitverseSelfService.store.getRepository(result.repositoryId);
+            if (!record) throw new Error("GitVerse repair repository record disappeared before review");
+            const app = createGitVerseApp({
+              config: gitverseOAuthConfig,
+              selfService: gitverseSelfService
+            });
+            const reviewResult = await app.handleWebhook({
+              deliveryId: `repair-${Date.now()}`,
+              payload: { pull_request: { number: pullNumber } },
+              authContext: {
+                source: "oauth",
+                repositoryId: record.repositoryId,
+                fullName: record.fullName,
+                installationId: record.installationId
+              },
+              repositoryId: record.repositoryId
+            });
+            process.stdout.write(`GitVerse repair review completed: ${JSON.stringify(reviewResult)}\n`);
+          }
         }).catch(error => {
           process.stderr.write(`GitVerse repair failed: ${error?.stack || error}\n`);
         });
