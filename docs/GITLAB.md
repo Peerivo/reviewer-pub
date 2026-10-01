@@ -156,3 +156,8 @@ stages:
 The job runs on Free/Premium/Ultimate. It does not execute the reviewed project's build, install scripts, tests or application code. The endpoint validates the ephemeral GitLab \`CI_JOB_TOKEN\` through GitLab's current-job API, verifies project/job/pipeline/SHA/MR identity against the connected Reviewer installation, then submits the same bounded authoritative review payload to the private Reviewer engine.
 
 A PASS returns HTTP 200 and the report in the job trace. A blocking review returns HTTP 422. The example captures the HTTP status separately, prints the complete Reviewer report first, then exits non-zero so GitLab marks the job failed without interleaving a noisy `curl: (22)` line. No additional customer secret is required beyond GitLab's built-in `CI_JOB_TOKEN`.
+
+
+## Actionable finding output
+
+The GitLab Free clickable CI job renders blocking findings as terminal-native guidance rather than raw Markdown. Each finding includes the exact file path, a link to the reviewed blob at the checked commit SHA, the reason the pattern is risky, and the remediation returned by the Reviewer engine. PASS/BLOCKED and category markers use ANSI terminal colors where supported by the GitLab job trace.
