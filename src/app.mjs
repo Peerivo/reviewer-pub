@@ -2,7 +2,7 @@ import { verifyWebhookSignature } from "./crypto.mjs";
 import { GitHubClient } from "./github.mjs";
 import { collectReviewPayload, shouldReviewPullRequestAction, submitReview } from "./reviewer.mjs";
 
-const CHECK_NAME = "Peerivo Reviewer";
+const CHECK_NAME = "Security review";
 
 function truncate(text, max = 60000) {
   const value = String(text || "");
@@ -47,8 +47,13 @@ export function createApp({ config, fetchImpl = fetch }) {
         status: "in_progress",
         external_id: `delivery:${deliveryId || "unknown"};pr:${pullNumber}`,
         output: {
-          title: "Peerivo Reviewer is checking this pull request",
-          summary: "The GitHub App is collecting bounded authoritative diff/workflow/security metadata. Reviewed project code is not executed."
+          title: "Review in progress",
+          summary: [
+            "> [!NOTE]",
+            "> **Review in progress** — collecting authoritative diff, workflow and security metadata.",
+            "",
+            "Reviewed project code is not executed."
+          ].join("\n")
         }
       });
       const checkId = check?.id;
@@ -84,9 +89,8 @@ export function createApp({ config, fetchImpl = fetch }) {
           conclusion: review.failed ? "failure" : "success",
           completed_at: new Date().toISOString(),
           output: {
-            title: review.failed ? "Peerivo Reviewer found blocking issues" : "Peerivo Reviewer passed",
-            summary: truncate(review.report),
-            text: `Review ID: ${review.reviewId}\nFindings: ${review.findings.length}`
+            title: review.failed ? "⛔ Blocking issues" : "✅ Passed",
+            summary: truncate(review.report)
           }
         });
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
@@ -96,8 +100,13 @@ export function createApp({ config, fetchImpl = fetch }) {
           conclusion: "failure",
           completed_at: new Date().toISOString(),
           output: {
-            title: "Peerivo Reviewer failed closed",
-            summary: truncate(`The review could not prove complete coverage and therefore did not pass.\n\n${error?.message || error}`)
+            title: "⚠️ Failed closed",
+            summary: truncate([
+              "> [!WARNING]",
+              "> **Review failed closed** — complete coverage could not be proven.",
+              "",
+              String(error?.message || error)
+            ].join("\n"))
           }
         });
         throw error;
