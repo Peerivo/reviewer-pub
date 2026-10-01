@@ -48,6 +48,34 @@ function findingCategory(id) {
   return "Other";
 }
 
+function remediationFor(id) {
+  const rule = String(id || "").toUpperCase();
+  const exact = {
+    "SUPPLY-001": "Download the artifact first, verify its checksum/signature, then execute the verified local file.",
+    "CI-001": "Do not execute untrusted PR-head code in a privileged pull_request_target-style workflow.",
+    "CI-002": "Replace write-all with explicit least-privilege permissions required by the job.",
+    "CI-003": "Restrict OIDC token minting to the exact trusted workflow, audience and subject conditions.",
+    "CI-004": "Pin the third-party Action to a full immutable commit SHA.",
+    "CI-005": "Set persist-credentials: false for checkout unless persisted credentials are explicitly required.",
+    "CI-006": "Pass PR-controlled metadata as data; do not interpolate it directly into shell command text.",
+    "CI-007": "Add explicit scope, authorization and recovery safeguards around the destructive command.",
+    "CI-008": "Pin the remote GitLab CI include to an immutable full commit SHA.",
+    "CI-009": "Do not feed merge-request controlled metadata into eval, sh -c or bash -c.",
+    "SEC-001": "Remove the credential from code and history, rotate it if real, and use the platform secret store.",
+    "DEPS-001": "Regenerate and commit the package lockfile together with the package manifest change.",
+    "DB-001": "Add a migration-capable CI execution path so schema changes are applied and verified explicitly.",
+    "SAAS-RUNTIME-099": "Restore complete Reviewer coverage for the security-relevant file before allowing the change."
+  };
+  return exact[rule] || "Review the finding, remove the risky pattern, and rerun Peerivo Reviewer.";
+}
+
+function encodedBlobUrl(projectUrl, sha, path) {
+  const base = String(projectUrl || "").replace(/\/$/, "");
+  if (!base || !/^[0-9a-f]{40}$/i.test(String(sha || "")) || !path) return "";
+  const encodedPath = String(path).split("/").map(part => encodeURIComponent(part)).join("/");
+  return `${base}/-/blob/${sha}/${encodedPath}`;
+}
+
 function categoryLines(findings) {
   const categories = [
     "CI / supply chain",
@@ -78,7 +106,9 @@ export function formatGitLabCiConsoleResult(result) {
 
   const lines = [
     "",
-    blocked ? "Peerivo Reviewer — BLOCKED" : "Peerivo Reviewer — PASS",
+    blocked
+      ? `${ANSI_RED}Peerivo Reviewer — BLOCKED${ANSI_RESET}`
+      : `${ANSI_GREEN}Peerivo Reviewer — PASS${ANSI_RESET}`,
     "",
     `Findings: ${findings.length}`,
     filesReviewed === null ? null : `Files reviewed: ${filesReviewed}`,
@@ -92,14 +122,23 @@ export function formatGitLabCiConsoleResult(result) {
 
   if (findings.length > 0) {
     lines.push("", "Findings:");
-    for (const item of findings.slice(0, 20)) {
+    for (const [index, item] of findings.slice(0, 20).entries()) {
       const severity = oneLine(item?.severity || "info").toUpperCase();
       const id = oneLine(item?.id || "UNKNOWN");
       const title = oneLine(item?.title || item?.message || "Finding");
       const path = oneLine(item?.path || "");
-      lines.push(`  - [${severity}] ${id} ${title}${path ? ` — ${path}` : ""}`);
+      const why = oneLine(item?.message || title);
+      const fileUrl = encodedBlobUrl(result?.projectUrl, result?.sha, path);
+      lines.push(
+        "",
+        `  ${index + 1}. ${ANSI_RED}[${severity}] ${id}${ANSI_RESET} ${title}`,
+        path ? `     File: ${path}` : null,
+        fileUrl ? `     Open: ${fileUrl}` : null,
+        `     Why:  ${why}`,
+        `     Fix:  ${remediationFor(id)}`
+      );
     }
-    if (findings.length > 20) lines.push(`  … ${findings.length - 20} more finding(s)`);
+    if (findings.length > 20) lines.push("", `  … ${findings.length - 20} more finding(s)`);
   }
 
   if (result?.reviewId) {
@@ -199,6 +238,7 @@ export function createGitLabCiBridge({ config, selfService, fetchImpl = fetch } 
         jobId: input.jobId,
         sha: input.sha,
         repository: installed.pathWithNamespace,
+        projectUrl: typeof project?.web_url === "string" ? project.web_url : "",
         filesReviewed: reviewPayload.changes.length
       };
     }
