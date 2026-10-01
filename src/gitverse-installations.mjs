@@ -159,6 +159,23 @@ export class GitVerseInstallationStore {
     };
   }
 
+  findInstallationByLogin(login) {
+    const normalized = String(login || "").trim();
+    if (!normalized) return null;
+    const row = this.db.prepare(
+      "SELECT id FROM gitverse_installations WHERE lower(login) = lower(?) ORDER BY updated_at DESC LIMIT 1"
+    ).get(normalized);
+    return row ? this.getInstallation(row.id) : null;
+  }
+
+  getRepositoryByFullName(fullName) {
+    const repository = repositoryIdentity(fullName);
+    const row = this.db.prepare(
+      "SELECT repository_id FROM gitverse_repositories WHERE full_name = ? AND active = 1 LIMIT 1"
+    ).get(repository);
+    return row ? this.getRepository(row.repository_id) : null;
+  }
+
   updateTokens(id, { accessToken, refreshToken, tokenExpiresAt }) {
     if (!accessToken || !refreshToken || !Number.isSafeInteger(tokenExpiresAt) || tokenExpiresAt <= this.clock()) {
       throw new Error("invalid refreshed GitVerse OAuth tokens");
