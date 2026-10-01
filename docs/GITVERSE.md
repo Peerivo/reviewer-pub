@@ -70,9 +70,33 @@ The hosted integration upserts one marked **Peerivo Reviewer** comment on the pu
 
 ## Hard merge gate
 
-The current documented GitVerse Public API exposes repository webhooks and pull-request comments, but the integration does not rely on an undocumented commit-status/check API. For a hard CI gate, use the existing checksum-pinned thin client in a protected GitVerse workflow. It exits non-zero when Reviewer reports blocking findings.
+For a hard CI gate, use `examples/gitverse.yml`. The workflow downloads the public source-transparent collector from `clients/remote-reviewer.mjs`, verifies its SHA-256, checks out the exact PR head only as Git data and submits a bounded review payload to `https://api.reviewer.peerivo.net`.
 
-That workflow remains useful as a fallback and for customers who do not want OAuth installation.
+Configure these repository values:
+
+```text
+Variable: PEERIVO_REVIEWER_CLIENT_URL
+Variable: PEERIVO_REVIEWER_CLIENT_SHA256
+Secret:   PEERIVO_LICENSE
+```
+
+The client exits non-zero when Reviewer reports a finding at or above the configured blocking threshold, and exits with code 2 when coverage or service validation fails closed.
+
+### E2E blocking fixture
+
+To verify that a real Reviewer finding—not a synthetic `exit 1`—turns the GitVerse check red, add this file only on the PR branch:
+
+```js
+// security-gate.js
+export function decide(input, threshold) {
+  const elapsed = Number(input.elapsed ?? 0);
+  return elapsed <= threshold ? "ALLOW" : "DENY";
+}
+```
+
+Reviewer should report `FC-001` with high severity because a security-relevant numeric value defaults to zero before validation. With the default `high` threshold the CI job must fail. After replacing the permissive coercion with explicit validation, the same workflow should return green.
+
+The fixture is deliberately small and deterministic. Do not merge it into the protected target branch.
 
 ## Token lifecycle and disconnect
 
