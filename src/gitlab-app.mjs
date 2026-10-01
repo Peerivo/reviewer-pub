@@ -94,7 +94,9 @@ export function createGitLabApp({ config, selfService = null, fetchImpl = fetch 
         ? mr.source_project_id
         : projectId;
       const ref = typeof mr?.source_branch === "string" ? mr.source_branch : "";
-      const targetUrl = typeof mr?.web_url === "string" ? mr.web_url : "";
+      const targetUrl = typeof mr?.head_pipeline?.web_url === "string" && mr.head_pipeline.web_url
+        ? mr.head_pipeline.web_url
+        : typeof mr?.web_url === "string" ? mr.web_url : "";
       const headPipelineId = gitLabHeadPipelineId(mr, statusProjectId, headSha);
 
       await gitlab.setCommitStatus(statusProjectId, headSha, {
