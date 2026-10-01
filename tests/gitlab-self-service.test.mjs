@@ -82,7 +82,7 @@ test("GitLab self-service installs projects, refreshes OAuth and disconnects", a
   assert.equal(authorize.origin, "https://gitlab.com");
   assert.equal(authorize.searchParams.get("scope"), "api");
   assert.ok(authorize.searchParams.get("state"));
-  assert.ok(authorize.searchParams.get("code_challenge"));
+  assert.equal(authorize.searchParams.get("code_challenge"), null);
 
   const completed = await runtime.completeOAuth({
     code: "oauth-code",
