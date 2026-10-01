@@ -48,6 +48,23 @@ function findingCategory(id) {
   return "Other";
 }
 
+function fallbackRemediation(id) {
+  const rule = String(id || "").toUpperCase();
+  if (/^(?:CI-|SUPPLY-)/.test(rule)) return "Remove the unsafe CI or supply-chain pattern and rerun Peerivo Reviewer.";
+  if (/^SEC-/.test(rule)) return "Remove and rotate the credential if real, then use the platform secret store.";
+  if (/^DEPS-/.test(rule)) return "Regenerate and commit the lockfile together with the manifest change.";
+  if (/^DB-/.test(rule)) return "Add an explicit migration-capable CI execution path.";
+  if (/^PUBLIC-/.test(rule)) return "Remove the material from the public repository or move it to an approved private location.";
+  return "Resolve the reported risk and rerun Peerivo Reviewer.";
+}
+
+function blobUrl(projectUrl, sha, path) {
+  const base = String(projectUrl || "").replace(/\/$/, "");
+  if (!base || !/^[0-9a-f]{40}$/i.test(String(sha || "")) || !path) return "";
+  const encoded = String(path).split("/").map(part => encodeURIComponent(part)).join("/");
+  return `${base}/-/blob/${sha}/${encoded}`;
+}
+
 function categoryLines(findings) {
   const categories = [
     "CI / supply chain",
@@ -78,7 +95,9 @@ export function formatGitLabCiConsoleResult(result) {
 
   const lines = [
     "",
-    blocked ? "Peerivo Reviewer — BLOCKED" : "Peerivo Reviewer — PASS",
+    blocked
+      ? `${ANSI_RED}Peerivo Reviewer — BLOCKED${ANSI_RESET}`
+      : `${ANSI_GREEN}Peerivo Reviewer — PASS${ANSI_RESET}`,
     "",
     `Findings: ${findings.length}`,
     filesReviewed === null ? null : `Files reviewed: ${filesReviewed}`,
@@ -92,14 +111,24 @@ export function formatGitLabCiConsoleResult(result) {
 
   if (findings.length > 0) {
     lines.push("", "Findings:");
-    for (const item of findings.slice(0, 20)) {
+    for (const [index, item] of findings.slice(0, 20).entries()) {
       const severity = oneLine(item?.severity || "info").toUpperCase();
       const id = oneLine(item?.id || "UNKNOWN");
       const title = oneLine(item?.title || item?.message || "Finding");
       const path = oneLine(item?.path || "");
-      lines.push(`  - [${severity}] ${id} ${title}${path ? ` — ${path}` : ""}`);
+      const why = oneLine(item?.message || title);
+      const fix = oneLine(item?.remediation || fallbackRemediation(id));
+      const open = blobUrl(result?.projectUrl, result?.sha, path);
+      lines.push(
+        "",
+        `  ${index + 1}. ${ANSI_RED}[${severity}] ${id}${ANSI_RESET} ${title}`,
+        path ? `     File: ${path}` : null,
+        open ? `     Open: ${open}` : null,
+        `     Why:  ${why}`,
+        `     Fix:  ${fix}`
+      );
     }
-    if (findings.length > 20) lines.push(`  … ${findings.length - 20} more finding(s)`);
+    if (findings.length > 20) lines.push("", `  … ${findings.length - 20} more finding(s)`);
   }
 
   if (result?.reviewId) {
@@ -199,6 +228,7 @@ export function createGitLabCiBridge({ config, selfService, fetchImpl = fetch } 
         jobId: input.jobId,
         sha: input.sha,
         repository: installed.pathWithNamespace,
+        projectUrl: typeof project?.web_url === "string" ? project.web_url : "",
         filesReviewed: reviewPayload.changes.length
       };
     }

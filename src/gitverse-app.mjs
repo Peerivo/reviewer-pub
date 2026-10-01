@@ -28,14 +28,44 @@ function compact(value, max = 180) {
   return text.length <= max ? text : text.slice(0, max - 1) + "…";
 }
 
-function findingLine(item) {
+function fallbackRemediation(id) {
+  const rule = String(id || "").toUpperCase();
+  if (/^(?:CI-|SUPPLY-)/.test(rule)) return "Remove the unsafe CI or supply-chain pattern and rerun Peerivo Reviewer.";
+  if (/^SEC-/.test(rule)) return "Remove and rotate the credential if real, then use the platform secret store.";
+  if (/^DEPS-/.test(rule)) return "Regenerate and commit the lockfile together with the manifest change.";
+  if (/^DB-/.test(rule)) return "Add an explicit migration-capable CI execution path.";
+  if (/^PUBLIC-/.test(rule)) return "Remove the material from the public repository or move it to an approved private location.";
+  return "Resolve the reported risk and rerun Peerivo Reviewer.";
+}
+
+export function gitVerseBlobUrl(webBaseUrl, repo, sha, path) {
+  const base = String(webBaseUrl || "https://gitverse.ru").replace(/\/$/, "");
+  const commit = String(sha || "").toLowerCase();
+  const file = String(path || "").trim();
+  if (!/^[0-9a-f]{40}$/.test(commit) || !file) return "";
+  const encodedPath = file.split("/").map(encodeURIComponent).join("/");
+  return base + "/" + repoPath(repo) + "/blob/" + commit + "/" + encodedPath;
+}
+
+function findingBlock(item, index, { webBaseUrl = "", repo = "", headSha = "" } = {}) {
   const severity = String(item?.severity || "info").toUpperCase();
   const id = compact(item?.id || "FINDING", 64);
   const title = compact(item?.title || item?.message || "Reviewer finding");
-  const path = compact(item?.path || "", 160).replace(/`/g, "'");
-  return path
-    ? "- **" + severity + " · " + id + "** — " + title + " — `" + path + "`"
-    : "- **" + severity + " · " + id + "** — " + title;
+  const path = compact(item?.path || "", 200).replace(/`/g, "'");
+  const why = compact(item?.message || title, 360);
+  const fix = compact(item?.remediation || fallbackRemediation(id), 360);
+  const open = gitVerseBlobUrl(webBaseUrl, repo, headSha, path);
+  const lines = [
+    "**" + index + ". " + severity + " · " + id + " — " + title + "**"
+  ];
+  if (path) {
+    lines.push(open
+      ? "- **File:** [" + path + "](" + open + ")"
+      : "- **File:** `" + path + "`");
+  }
+  lines.push("- **Why:** " + why);
+  lines.push("- **Fix:** " + fix);
+  return lines.join("\n");
 }
 
 async function upsertComment(gitverse, repo, pullNumber, body) {
@@ -63,7 +93,12 @@ export function pendingBody({ checkUrl = "" } = {}) {
   ].filter(Boolean).join("\n");
 }
 
-export function resultBody(review, changedFiles = null, { checkUrl = "" } = {}) {
+export function resultBody(review, changedFiles = null, {
+  checkUrl = "",
+  webBaseUrl = "",
+  repo = "",
+  headSha = ""
+} = {}) {
   const items = Array.isArray(review?.findings) ? review.findings : [];
   const findings = items.length;
   const files = Number.isSafeInteger(changedFiles) && changedFiles >= 0 ? changedFiles : null;
@@ -79,9 +114,11 @@ export function resultBody(review, changedFiles = null, { checkUrl = "" } = {}) 
   ];
 
   if (review.failed && findings > 0) {
-    body.push("", "**Findings**");
-    body.push(...items.slice(0, 3).map(findingLine));
-    if (findings > 3) body.push("- +" + (findings - 3) + " more in the Reviewer check");
+    body.push("", "**Findings & fixes**");
+    items.slice(0, 3).forEach((item, index) => {
+      body.push("", findingBlock(item, index + 1, { webBaseUrl, repo, headSha }));
+    });
+    if (findings > 3) body.push("", "+" + (findings - 3) + " more in the Reviewer check.");
   }
 
   if (checkUrl) body.push("", "---", checkLink(checkUrl));
@@ -156,7 +193,12 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
           gitverse,
           repo,
           pullNumber,
-          resultBody(review, reviewPayload.changes.length, { checkUrl })
+          resultBody(review, reviewPayload.changes.length, {
+            checkUrl,
+            webBaseUrl: config.webBaseUrl,
+            repo,
+            headSha
+          })
         );
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
       } catch (error) {

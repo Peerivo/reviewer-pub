@@ -24,7 +24,12 @@ function gitlabStub() {
   return {
     async project(id) {
       assert.ok(id === 7 || id === "triombus/test");
-      return { id: 7, path_with_namespace: "triombus/test", visibility: "public" };
+      return {
+        id: 7,
+        path_with_namespace: "triombus/test",
+        visibility: "public",
+        web_url: "https://gitlab.example.com/triombus/test"
+      };
     },
     async mergeRequest(repo, iid) {
       assert.equal(repo, "triombus/test");
@@ -129,6 +134,7 @@ test("GitLab Free CI bridge validates job identity and returns Reviewer result",
   assert.equal(result.reviewId, "review-1");
   assert.equal(result.pipelineId, 99);
   assert.equal(result.repository, "triombus/test");
+  assert.equal(result.projectUrl, "https://gitlab.example.com/triombus/test");
   assert.equal(result.filesReviewed, 1);
   assert.equal(calls.length, 2);
 });
@@ -214,6 +220,8 @@ test("GitLab console BLOCKED report prints concise findings", () => {
     failed: true,
     filesReviewed: 3,
     repository: "triombus/test",
+    projectUrl: "https://gitlab.example.com/triombus/test",
+    sha,
     mergeRequestIid: 1,
     reviewId: "review-blocked",
     findings: [
@@ -221,12 +229,15 @@ test("GitLab console BLOCKED report prints concise findings", () => {
         id: "CI-004",
         severity: "high",
         title: "Third-party Action is not pinned",
+        message: "Action uses a mutable version tag.",
+        remediation: "Pin the third-party Action to a full immutable commit SHA.",
         path: ".gitlab-ci.yml"
       },
       {
         id: "SUPPLY-001",
         severity: "high",
         message: "Remote content is piped to a shell",
+        remediation: "Download and verify the artifact before execution.",
         path: ".gitlab-ci.yml"
       }
     ]
@@ -236,6 +247,11 @@ test("GitLab console BLOCKED report prints concise findings", () => {
   assert.match(output, /Findings: 2/);
   assert.match(output, /\u001b\[31m✗\u001b\[0m CI \/ supply chain \(2 findings\)/);
   assert.match(output, /\u001b\[32m✓\u001b\[0m Secrets/);
-  assert.match(output, /\[HIGH\] CI-004 Third-party Action is not pinned — \.gitlab-ci\.yml/);
-  assert.match(output, /\[HIGH\] SUPPLY-001 Remote content is piped to a shell — \.gitlab-ci\.yml/);
+  assert.match(output, /\u001b\[31m\[HIGH\] CI-004\u001b\[0m Third-party Action is not pinned/);
+  assert.match(output, /File: \.gitlab-ci\.yml/);
+  assert.match(output, /Open: https:\/\/gitlab\.example\.com\/triombus\/test\/-\/blob\/[0-9a-f]{40}\/\.gitlab-ci\.yml/);
+  assert.match(output, /Why:  Action uses a mutable version tag\./);
+  assert.match(output, /Fix:  Pin the third-party Action to a full immutable commit SHA\./);
+  assert.match(output, /\u001b\[31m\[HIGH\] SUPPLY-001\u001b\[0m Remote content is piped to a shell/);
+  assert.match(output, /Fix:  Download and verify the artifact before execution\./);
 });
