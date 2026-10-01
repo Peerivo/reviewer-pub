@@ -34,6 +34,37 @@ function oneLine(value) {
   return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
 }
 
+function findingCategory(id) {
+  const rule = String(id || "").toUpperCase();
+  if (/^(?:CI-|SUPPLY-)/.test(rule)) return "CI / supply chain";
+  if (/^SEC-/.test(rule)) return "Secrets";
+  if (/^DEPS-/.test(rule)) return "Dependencies";
+  if (/^DB-/.test(rule)) return "Migrations";
+  if (/^SAAS-RUNTIME-/.test(rule)) return "Runtime boundaries";
+  return "Other";
+}
+
+function categoryLines(findings) {
+  const categories = [
+    "CI / supply chain",
+    "Secrets",
+    "Dependencies",
+    "Migrations",
+    "Runtime boundaries"
+  ];
+  const counts = new Map(categories.map(name => [name, 0]));
+  for (const item of findings) {
+    const category = findingCategory(item?.id);
+    if (counts.has(category)) counts.set(category, counts.get(category) + 1);
+  }
+  return categories.map(name => {
+    const count = counts.get(name) || 0;
+    return count > 0
+      ? `  ✗ ${name} (${count} finding${count === 1 ? "" : "s"})`
+      : `  ✓ ${name}`;
+  });
+}
+
 export function formatGitLabCiConsoleResult(result) {
   const findings = Array.isArray(result?.findings) ? result.findings : [];
   const filesReviewed = Number.isSafeInteger(result?.filesReviewed) && result.filesReviewed >= 0
@@ -52,11 +83,7 @@ export function formatGitLabCiConsoleResult(result) {
       : null,
     "",
     "Checks:",
-    "  ✓ CI / supply chain",
-    "  ✓ Secrets",
-    "  ✓ Dependencies",
-    "  ✓ Migrations",
-    "  ✓ Runtime boundaries"
+    ...categoryLines(findings)
   ].filter(line => line !== null);
 
   if (findings.length > 0) {
