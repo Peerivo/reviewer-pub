@@ -30,6 +30,10 @@ export function validateGitLabCiRequest(value) {
   };
 }
 
+const ANSI_GREEN = "\u001b[32m";
+const ANSI_RED = "\u001b[31m";
+const ANSI_RESET = "\u001b[0m";
+
 function oneLine(value) {
   return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
 }
@@ -60,8 +64,8 @@ function categoryLines(findings) {
   return categories.map(name => {
     const count = counts.get(name) || 0;
     return count > 0
-      ? `  ✗ ${name} (${count} finding${count === 1 ? "" : "s"})`
-      : `  ✓ ${name}`;
+      ? `  ${ANSI_RED}✗${ANSI_RESET} ${name} (${count} finding${count === 1 ? "" : "s"})`
+      : `  ${ANSI_GREEN}✓${ANSI_RESET} ${name}`;
   });
 }
 
