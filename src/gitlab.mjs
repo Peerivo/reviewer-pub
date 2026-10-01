@@ -74,15 +74,37 @@ export class GitLabClient {
   async manageableProjects({ maxProjects = 1000 } = {}) {
     const limit = Number(maxProjects);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5000) throw new GitLabError("invalid project discovery limit", 500);
+
+    const accessLevel = project => {
+      const projectAccess = Number(project?.permissions?.project_access?.access_level);
+      const groupAccess = Number(project?.permissions?.group_access?.access_level);
+      const values = [projectAccess, groupAccess].filter(Number.isFinite);
+      return values.length ? Math.max(...values) : null;
+    };
+
     const result = [];
+    let scanned = 0;
     const pages = Math.ceil(limit / 100) + 1;
     for (let page = 1; page <= pages; page += 1) {
       const batch = await this.request(
-        `/projects?membership=true&min_access_level=40&archived=false&simple=true&order_by=path&sort=asc&per_page=100&page=${page}`
+        `/projects?membership=true&archived=false&simple=false&order_by=path&sort=asc&per_page=100&page=${page}`
       );
       if (!Array.isArray(batch)) throw new GitLabError("GitLab projects response was not an array", 502);
-      result.push(...batch);
-      if (result.length > limit) throw new GitLabError(`GitLab account exceeds project discovery limit (${limit})`, 422);
+
+      for (const item of batch) {
+        scanned += 1;
+        if (scanned > limit) throw new GitLabError(`GitLab account exceeds project discovery limit (${limit})`, 422);
+        if (!Number.isSafeInteger(item?.id) || item.id < 1) continue;
+
+        let project = item;
+        let level = accessLevel(project);
+        if (level === null) {
+          project = await this.project(item.id);
+          level = accessLevel(project);
+        }
+        if (level !== null && level >= 40) result.push(project);
+      }
+
       if (batch.length < 100) return result;
     }
     throw new GitLabError("GitLab project pagination exceeded safe bound", 422);

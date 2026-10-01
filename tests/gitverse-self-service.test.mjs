@@ -39,7 +39,13 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
     }
 
     if (url.pathname === "/user") return Response.json({ id: 42, login: "oleg" });
-    if (url.pathname === "/user/repos") return Response.json([repository]);
+    if (url.pathname === "/user/repos") return Response.json([{
+      ...repository,
+      permissions: undefined
+    }]);
+    if (url.pathname === "/repos/peerivo/demo" && (options.method || "GET") === "GET") {
+      return Response.json(repository);
+    }
     if (url.pathname === "/repos/peerivo/demo/hooks" && options.method === "GET") return Response.json([]);
     if (url.pathname === "/repos/peerivo/demo/hooks" && options.method === "POST") {
       const body = JSON.parse(options.body);
