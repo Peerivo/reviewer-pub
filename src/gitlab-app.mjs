@@ -2,6 +2,14 @@ import { verifySharedSecret } from "./crypto.mjs";
 import { GitLabClient } from "./gitlab.mjs";
 import { collectGitLabReviewPayload, shouldReviewGitLabMergeRequest, submitReview } from "./reviewer.mjs";
 
+export function gitLabStatusDescription({ state, findings = 0 }) {
+  const count = Number.isSafeInteger(findings) && findings >= 0 ? findings : 0;
+  if (state === "pending") return "Review in progress";
+  if (state === "failed_closed") return "Failed closed";
+  if (state === "blocked") return `Blocked — ${count} finding${count === 1 ? "" : "s"}`;
+  return `Passed — ${count} finding${count === 1 ? "" : "s"}`;
+}
+
 function requiredWebhookIdentity(payload) {
   const projectId = payload?.project?.id;
   const repo = payload?.project?.path_with_namespace;
@@ -81,7 +89,7 @@ export function createGitLabApp({ config, selfService = null, fetchImpl = fetch 
 
       await gitlab.setCommitStatus(statusProjectId, headSha, {
         state: "pending",
-        description: "Peerivo Reviewer is collecting authoritative merge-request security metadata.",
+        description: gitLabStatusDescription({ state: "pending" }),
         ref,
         targetUrl
       });
@@ -114,9 +122,10 @@ export function createGitLabApp({ config, selfService = null, fetchImpl = fetch 
 
         await gitlab.setCommitStatus(statusProjectId, headSha, {
           state: review.failed ? "failed" : "success",
-          description: review.failed
-            ? `Peerivo Reviewer found ${review.findings.length} finding(s); blocking threshold reached.`
-            : `Peerivo Reviewer passed; ${review.findings.length} finding(s).`,
+          description: gitLabStatusDescription({
+            state: review.failed ? "blocked" : "passed",
+            findings: review.findings.length
+          }),
           ref,
           targetUrl
         });
@@ -125,7 +134,7 @@ export function createGitLabApp({ config, selfService = null, fetchImpl = fetch 
       } catch (error) {
         await gitlab.setCommitStatus(statusProjectId, headSha, {
           state: "failed",
-          description: "Peerivo Reviewer failed closed because complete review coverage could not be proven.",
+          description: gitLabStatusDescription({ state: "failed_closed" }),
           ref,
           targetUrl
         });
