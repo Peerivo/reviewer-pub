@@ -11,13 +11,25 @@ export class GitVerseOAuthError extends Error {
 }
 
 function parseScopes(value) {
-  return new Set(String(value || "").split(/\s+/).map(item => item.trim()).filter(Boolean));
+  const raw = Array.isArray(value) ? value.join(" ") : String(value || "");
+  return new Set(raw.split(/[\s,]+/).map(item => item.trim()).filter(Boolean));
+}
+
+function hasScope(scopes, required) {
+  if (scopes.has(required)) return true;
+  if (required.startsWith("read:")) {
+    return scopes.has(`write:${required.slice("read:".length)}`);
+  }
+  return false;
 }
 
 function assertScopes(value) {
   const scopes = parseScopes(value);
   for (const required of REQUIRED_SCOPES) {
-    if (!scopes.has(required)) throw new GitVerseOAuthError(`GitVerse OAuth grant is missing required scope: ${required}`, 403);
+    if (!hasScope(scopes, required)) {
+      const granted = [...scopes].sort().join(" ") || "(none)";
+      throw new GitVerseOAuthError(`GitVerse OAuth grant is missing required scope: ${required}; granted: ${granted}`, 403);
+    }
   }
   return [...scopes].sort();
 }

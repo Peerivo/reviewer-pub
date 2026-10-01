@@ -87,7 +87,7 @@ export class GitLabOAuthClient {
       headers: {
         accept: "application/json",
         "content-type": "application/x-www-form-urlencoded",
-        "user-agent": "Peerivo-Reviewer-GitLab-OAuth/0.4"
+        "user-agent": "Peerivo-Reviewer-GitLab-OAuth/0.5"
       },
       body: new URLSearchParams(parameters),
       redirect: "error"
@@ -99,7 +99,6 @@ export class GitLabOAuthClient {
     if (!code) throw new GitLabOAuthError("GitLab OAuth callback is missing code", 400);
     return this.tokenRequest({
       client_id: this.clientId,
-      client_secret: this.clientSecret,
       code: String(code),
       grant_type: "authorization_code",
       redirect_uri: this.redirectUri,
@@ -111,7 +110,6 @@ export class GitLabOAuthClient {
     if (!refreshToken) throw new GitLabOAuthError("GitLab OAuth refresh token is missing", 401);
     return this.tokenRequest({
       client_id: this.clientId,
-      client_secret: this.clientSecret,
       refresh_token: String(refreshToken),
       grant_type: "refresh_token",
       redirect_uri: this.redirectUri
@@ -125,7 +123,7 @@ export class GitLabOAuthClient {
       headers: {
         accept: "application/json",
         "content-type": "application/x-www-form-urlencoded",
-        "user-agent": "Peerivo-Reviewer-GitLab-OAuth/0.4"
+        "user-agent": "Peerivo-Reviewer-GitLab-OAuth/0.5"
       },
       body: new URLSearchParams({
         client_id: this.clientId,

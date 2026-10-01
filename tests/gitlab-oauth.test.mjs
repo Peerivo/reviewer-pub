@@ -47,6 +47,7 @@ test("GitLab OAuth exchanges and rotates refresh tokens", async () => {
   const firstBody = calls[0].options.body;
   assert.equal(firstBody.get("grant_type"), "authorization_code");
   assert.equal(firstBody.get("code_verifier"), "v".repeat(64));
+  assert.equal(firstBody.get("client_secret"), null);
 
   const second = await client.refresh("refresh-1");
   assert.equal(second.accessToken, "access-2");
@@ -54,4 +55,5 @@ test("GitLab OAuth exchanges and rotates refresh tokens", async () => {
   const secondBody = calls[1].options.body;
   assert.equal(secondBody.get("grant_type"), "refresh_token");
   assert.equal(secondBody.get("refresh_token"), "refresh-1");
+  assert.equal(secondBody.get("client_secret"), null);
 });

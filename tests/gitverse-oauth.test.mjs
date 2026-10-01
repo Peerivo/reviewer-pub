@@ -59,3 +59,38 @@ test("GitVerse OAuth refresh rotates access and refresh tokens", async () => {
   assert.equal(token.tokenExpiresAt, 3_601_000);
   assert.equal(calls[0].body.get("grant_type"), "refresh_token");
 });
+
+
+test("GitVerse OAuth accepts comma-delimited granted scopes", async () => {
+  const client = new GitVerseOAuthClient({
+    webBaseUrl: "https://gitverse.ru",
+    clientId: "client-id",
+    clientSecret: "client-secret",
+    redirectUri: "https://reviewer.example.com/oauth/gitverse/callback",
+    fetchImpl: async () => Response.json({
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 3600,
+      scope: "read:user,write:repository"
+    })
+  });
+  const token = await client.exchangeCode({ code: "gta_code", verifier: "v".repeat(64) });
+  assert.deepEqual(token.scopes, ["read:user", "write:repository"]);
+});
+
+test("GitVerse OAuth treats write:user as satisfying read:user", async () => {
+  const client = new GitVerseOAuthClient({
+    webBaseUrl: "https://gitverse.ru",
+    clientId: "client-id",
+    clientSecret: "client-secret",
+    redirectUri: "https://reviewer.example.com/oauth/gitverse/callback",
+    fetchImpl: async () => Response.json({
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 3600,
+      scope: "write:user write:repository"
+    })
+  });
+  const token = await client.exchangeCode({ code: "gta_code", verifier: "v".repeat(64) });
+  assert.deepEqual(token.scopes, ["write:repository", "write:user"]);
+});
