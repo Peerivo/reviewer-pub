@@ -39,6 +39,7 @@ export class GitLabClient {
 
   authHeaders() {
     if (this.authMode === "bearer") return { authorization: `Bearer ${this.token}` };
+    if (this.authMode === "job-token") return { "job-token": this.token };
     return { "private-token": this.token };
   }
 
@@ -69,6 +70,14 @@ export class GitLabClient {
       throw new GitLabError("GitLab returned invalid authenticated user identity", 502);
     }
     return user;
+  }
+
+  async currentJob() {
+    const job = await this.request("/job");
+    if (!Number.isSafeInteger(job?.id) || job.id < 1) {
+      throw new GitLabError("GitLab returned invalid CI job identity", 502);
+    }
+    return job;
   }
 
   async manageableProjects({ maxProjects = 1000 } = {}) {
