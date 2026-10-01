@@ -72,12 +72,10 @@ The hosted integration upserts one marked **Peerivo Reviewer** comment on the pu
 
 For a hard CI gate, use `examples/gitverse.yml`. The workflow downloads the public source-transparent collector from `clients/remote-reviewer.mjs`, verifies its SHA-256, checks out the exact PR head only as Git data and submits a bounded review payload to `https://api.reviewer.peerivo.net`.
 
-Configure these repository values:
+The public example pins both the client URL and SHA-256 to an immutable reviewer-pub commit. The customer repository only needs this secret:
 
 ```text
-Variable: PEERIVO_REVIEWER_CLIENT_URL
-Variable: PEERIVO_REVIEWER_CLIENT_SHA256
-Secret:   PEERIVO_LICENSE
+Secret: PEERIVO_LICENSE
 ```
 
 The client exits non-zero when Reviewer reports a finding at or above the configured blocking threshold, and exits with code 2 when coverage or service validation fails closed.
