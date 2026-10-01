@@ -168,6 +168,28 @@ export class GitVerseClient {
     throw new GitVerseError("GitVerse tree pagination exceeded safe bound", 422);
   }
 
+  async contentEntry(fullName, path, ref) {
+    const [owner, repo] = repoParts(fullName);
+    const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
+    const suffix = ref ? `?ref=${encodeURIComponent(String(ref))}` : "";
+    return this.request(`/repos/${owner}/${repo}/contents/${encodedPath}${suffix}`);
+  }
+
+  async putFile(fullName, path, { branch, content, message, sha = "" } = {}) {
+    const [owner, repo] = repoParts(fullName);
+    const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
+    const body = {
+      branch: String(branch || ""),
+      content: Buffer.from(String(content || ""), "utf8").toString("base64"),
+      message: String(message || "Update file via Peerivo Reviewer")
+    };
+    if (sha) body.sha = String(sha);
+    return this.request(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
+      method: "PUT",
+      body
+    });
+  }
+
   async fileContent(fullName, path, ref, { maxBytes }) {
     const [owner, repo] = repoParts(fullName);
     const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
