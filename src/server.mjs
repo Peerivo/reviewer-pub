@@ -1,6 +1,7 @@
 import http from "node:http";
 import { createApp } from "./app.mjs";
 import { createGitLabApp } from "./gitlab-app.mjs";
+import { createGitLabCiBridge } from "./gitlab-ci.mjs";
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 import { createGitVerseApp } from "./gitverse-app.mjs";
 import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
@@ -15,6 +16,17 @@ function json(res, status, body) {
   const raw = JSON.stringify(body);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(raw),
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff"
+  });
+  res.end(raw);
+}
+
+function plain(res, status, body) {
+  const raw = String(body || "");
+  res.writeHead(status, {
+    "content-type": "text/plain; charset=utf-8",
     "content-length": Buffer.byteLength(raw),
     "cache-control": "no-store",
     "x-content-type-options": "nosniff"
@@ -175,6 +187,7 @@ export function createServer({
 } = {}) {
   let githubApp;
   let gitlabApp;
+  let gitlabCiBridge;
   let selfService = gitlabSelfService || null;
   let oauthConfigResolved = gitlabOAuthConfig !== undefined;
   let resolvedOAuthConfig = gitlabOAuthConfig ?? null;
@@ -211,6 +224,17 @@ export function createServer({
       });
     }
     return gitlabApp;
+  };
+
+  const getGitLabCiBridge = () => {
+    if (!gitlabCiBridge) {
+      gitlabCiBridge = createGitLabCiBridge({
+        config: gitlabConfig || loadGitLabConfig(),
+        selfService: getGitLabSelfService({ required: true }),
+        fetchImpl
+      });
+    }
+    return gitlabCiBridge;
   };
 
   const getGitVerseSelfService = ({ required = false } = {}) => {
@@ -376,6 +400,31 @@ export function createServer({
           .catch(error => backgroundFailure(error, deliveryId));
 
         return json(res, 202, { ok: true, accepted: true, deliveryId: deliveryId || null });
+      }
+
+      if (req.method === "POST" && url.pathname === "/v1/ci/gitlab/review") {
+        const jobToken = String(req.headers["job-token"] || "").trim();
+        if (!jobToken) return plain(res, 401, "Peerivo Reviewer: GitLab CI job token is required.\n");
+
+        const rawBody = await readBody(req, 64 * 1024);
+        let request;
+        try {
+          request = JSON.parse(rawBody.toString("utf8"));
+        } catch {
+          return plain(res, 400, "Peerivo Reviewer: invalid CI request JSON.\n");
+        }
+
+        const result = await getGitLabCiBridge().review({ jobToken, request });
+        const status = result.failed ? 422 : 200;
+        const headline = result.failed ? "Peerivo Reviewer: BLOCKED" : "Peerivo Reviewer: PASS";
+        const body = [
+          headline,
+          `Findings: ${result.findings.length}`,
+          `Review ID: ${result.reviewId}`,
+          "",
+          result.report
+        ].join("\n");
+        return plain(res, status, body + "\n");
       }
 
       if (req.method === "POST" && url.pathname === "/webhooks/gitlab") {
