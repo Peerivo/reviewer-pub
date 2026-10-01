@@ -148,6 +148,7 @@ stages:
         exit 0
       fi
       exit 1
+  when: always
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 \`\`\`
