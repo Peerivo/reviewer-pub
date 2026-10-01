@@ -106,3 +106,43 @@ This mode remains an explicit fallback. New customer installations should use OA
 Reviewer never executes customer build scripts, package installation, migrations, tests, containers, or application code. It reads bounded repository material and sends the normalized review snapshot to the private Reviewer API.
 
 OAuth tokens and per-project webhook secrets are not written to application logs or returned to the customer browser.
+
+
+## GitLab Free clickable CI job
+
+The hosted integration publishes the authoritative \`Peerivo Reviewer\` external status. On GitLab Free, an external status does not have its own CI trace page. Repositories that want a normal clickable GitLab job can add this thin bridge job:
+
+\`\`\`yaml
+stages:
+  - test
+  - external
+
+"Peerivo Reviewer details":
+  stage: external
+  image: curlimages/curl:8.12.1
+  variables:
+    GIT_STRATEGY: "none"
+  script:
+    - |
+      cat > /tmp/peerivo-review.json <<JSON
+      {
+        "projectId": \${CI_PROJECT_ID},
+        "mergeRequestIid": \${CI_MERGE_REQUEST_IID},
+        "pipelineId": \${CI_PIPELINE_ID},
+        "jobId": \${CI_JOB_ID},
+        "sha": "\${CI_COMMIT_SHA}"
+      }
+      JSON
+      curl --fail-with-body --silent --show-error \\
+        --request POST \\
+        --header "JOB-TOKEN: \${CI_JOB_TOKEN}" \\
+        --header "Content-Type: application/json" \\
+        --data-binary @/tmp/peerivo-review.json \\
+        "https://pub.reviewer.peerivo.net/v1/ci/gitlab/review"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+\`\`\`
+
+The job runs on Free/Premium/Ultimate. It does not execute the reviewed project's build, install scripts, tests or application code. The endpoint validates the ephemeral GitLab \`CI_JOB_TOKEN\` through GitLab's current-job API, verifies project/job/pipeline/SHA/MR identity against the connected Reviewer installation, then submits the same bounded authoritative review payload to the private Reviewer engine.
+
+A PASS returns HTTP 200 and the report in the job trace. A blocking review returns HTTP 422, so \`curl --fail-with-body\` makes the GitLab job fail while preserving the Reviewer report in the trace. No additional customer secret is required beyond GitLab's built-in \`CI_JOB_TOKEN\`.
