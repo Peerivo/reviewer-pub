@@ -30,37 +30,41 @@ async function upsertComment(gitverse, repo, pullNumber, body) {
   return gitverse.createComment(repo, pullNumber, body);
 }
 
-function pendingBody(headSha) {
+export function pendingBody() {
   return [
     COMMENT_MARKER,
-    "### Peerivo Reviewer · checking",
-    "",
-    `Reviewing head \`${headSha}\` from authoritative GitVerse API data.`,
-    "",
-    "Reviewed project code is not executed."
+    "> [!NOTE]",
+    "> **Review in progress**"
   ].join("\n");
 }
 
-function resultBody(review, headSha) {
+export function resultBody(review, changedFiles = null) {
+  const findings = Array.isArray(review?.findings) ? review.findings.length : 0;
+  const files = Number.isSafeInteger(changedFiles) && changedFiles >= 0 ? changedFiles : null;
+  const summary = files === null
+    ? `${findings} finding${findings === 1 ? "" : "s"}`
+    : `${findings} finding${findings === 1 ? "" : "s"} · ${files} file${files === 1 ? "" : "s"} reviewed`;
+
   return [
     COMMENT_MARKER,
-    review.failed ? "### Peerivo Reviewer · blocking findings" : "### Peerivo Reviewer · passed",
+    review.failed ? "> [!CAUTION]" : "> [!TIP]",
+    review.failed ? "> **⛔ BLOCKED**" : "> **✅ PASS**",
+    summary,
     "",
-    `Head: \`${headSha}\``,
-    `Review ID: \`${review.reviewId}\``,
+    "<details>",
+    "<summary>View Peerivo Reviewer details</summary>",
     "",
-    truncate(review.report)
+    truncate(review.report),
+    "",
+    "</details>"
   ].join("\n");
 }
 
-function failClosedBody(headSha) {
+export function failClosedBody() {
   return [
     COMMENT_MARKER,
-    "### Peerivo Reviewer · failed closed",
-    "",
-    `Head: \`${headSha}\``,
-    "",
-    "Complete review coverage could not be proven, so this review did not pass."
+    "> [!WARNING]",
+    "> **⚠️ REVIEW FAILED CLOSED**"
   ].join("\n");
 }
 
@@ -89,7 +93,7 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
       const headSha = String(pr?.head?.sha || "").toLowerCase();
       if (!/^[0-9a-f]{40}$/.test(headSha)) throw new Error("GitVerse returned invalid PR head SHA");
 
-      await upsertComment(gitverse, repo, pullNumber, pendingBody(headSha));
+      await upsertComment(gitverse, repo, pullNumber, pendingBody());
 
       try {
         const reviewPayload = await collectGitVerseReviewPayload({
@@ -117,10 +121,10 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
           fetchImpl
         });
 
-        await upsertComment(gitverse, repo, pullNumber, resultBody(review, headSha));
+        await upsertComment(gitverse, repo, pullNumber, resultBody(review, reviewPayload.changes.length));
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
       } catch (error) {
-        try { await upsertComment(gitverse, repo, pullNumber, failClosedBody(headSha)); } catch {}
+        try { await upsertComment(gitverse, repo, pullNumber, failClosedBody()); } catch {}
         throw error;
       }
     }
