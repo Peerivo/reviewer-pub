@@ -2,6 +2,15 @@ import { verifySharedSecret } from "./crypto.mjs";
 import { GitLabClient } from "./gitlab.mjs";
 import { collectGitLabReviewPayload, shouldReviewGitLabMergeRequest, submitReview } from "./reviewer.mjs";
 
+export function gitLabHeadPipelineId(mr, statusProjectId, headSha) {
+  return Number.isSafeInteger(mr?.head_pipeline?.id)
+    && mr.head_pipeline.id > 0
+    && Number(mr?.head_pipeline?.project_id) === Number(statusProjectId)
+    && String(mr?.head_pipeline?.sha || "").toLowerCase() === String(headSha || "").toLowerCase()
+    ? mr.head_pipeline.id
+    : null;
+}
+
 export function gitLabStatusDescription({ state, findings = 0 }) {
   const count = Number.isSafeInteger(findings) && findings >= 0 ? findings : 0;
   if (state === "pending") return "Review in progress";
@@ -86,12 +95,7 @@ export function createGitLabApp({ config, selfService = null, fetchImpl = fetch 
         : projectId;
       const ref = typeof mr?.source_branch === "string" ? mr.source_branch : "";
       const targetUrl = typeof mr?.web_url === "string" ? mr.web_url : "";
-      const headPipelineId = Number.isSafeInteger(mr?.head_pipeline?.id)
-        && mr.head_pipeline.id > 0
-        && Number(mr?.head_pipeline?.project_id) === statusProjectId
-        && String(mr?.head_pipeline?.sha || "").toLowerCase() === headSha.toLowerCase()
-        ? mr.head_pipeline.id
-        : null;
+      const headPipelineId = gitLabHeadPipelineId(mr, statusProjectId, headSha);
 
       await gitlab.setCommitStatus(statusProjectId, headSha, {
         state: "pending",
