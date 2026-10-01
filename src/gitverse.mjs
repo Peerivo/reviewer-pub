@@ -75,15 +75,42 @@ export class GitVerseClient {
     return user;
   }
 
-  async manageableRepositories({ maxRepositories = 1000 } = {}) {
+  async manageableRepositories({ maxRepositories = 1000, login = "" } = {}) {
     const limit = Number(maxRepositories);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5000) throw new GitVerseError("invalid repository discovery limit", 500);
+    const normalizedLogin = String(login || "").trim();
     const result = [];
+    let scanned = 0;
     const pages = Math.ceil(limit / 50) + 1;
+
     for (let page = 1; page <= pages; page += 1) {
-      const batch = asArray(await this.request(`/user/repos?page=${page}&per_page=50`), "GitVerse repositories");
-      result.push(...batch);
-      if (result.length > limit) throw new GitVerseError(`GitVerse account exceeds repository discovery limit (${limit})`, 422);
+      let batch = asArray(await this.request(`/user/repos?page=${page}&per_page=50`), "GitVerse repositories");
+
+      // Some GitVerse deployments return an empty current-user listing even while the
+      // public owner listing is available. Use the documented owner endpoint only as
+      // a first-page fallback; detailed repo reads still prove authenticated admin access.
+      if (page === 1 && batch.length === 0 && normalizedLogin) {
+        batch = asArray(await this.request(
+          `/users/${encodeURIComponent(normalizedLogin)}/repos?type=owner&sort=full_name&direction=asc&page=1&per_page=50`
+        ), "GitVerse owner repositories");
+      }
+
+      for (const item of batch) {
+        scanned += 1;
+        if (scanned > limit) throw new GitVerseError(`GitVerse account exceeds repository discovery limit (${limit})`, 422);
+        if (!Number.isSafeInteger(item?.id) || item.id < 1 || typeof item?.full_name !== "string") continue;
+
+        let repository = item;
+        const listedAdmin = repository?.permissions?.admin;
+        const isOwnedByLogin = normalizedLogin
+          && String(repository?.owner?.login || "").toLowerCase() === normalizedLogin.toLowerCase();
+
+        if (listedAdmin !== true && (listedAdmin === undefined || isOwnedByLogin)) {
+          repository = await this.repository(item.full_name);
+        }
+        if (repository?.permissions?.admin === true) result.push(repository);
+      }
+
       if (batch.length < 50) return result;
     }
     throw new GitVerseError("GitVerse repository pagination exceeded safe bound", 422);
