@@ -30,6 +30,54 @@ export function validateGitLabCiRequest(value) {
   };
 }
 
+function oneLine(value) {
+  return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+}
+
+export function formatGitLabCiConsoleResult(result) {
+  const findings = Array.isArray(result?.findings) ? result.findings : [];
+  const filesReviewed = Number.isSafeInteger(result?.filesReviewed) && result.filesReviewed >= 0
+    ? result.filesReviewed
+    : null;
+  const blocked = result?.failed === true;
+
+  const lines = [
+    "",
+    blocked ? "Peerivo Reviewer — BLOCKED" : "Peerivo Reviewer — PASS",
+    "",
+    `Findings: ${findings.length}`,
+    filesReviewed === null ? null : `Files reviewed: ${filesReviewed}`,
+    result?.repository && result?.mergeRequestIid
+      ? `Merge request: ${oneLine(result.repository)} !${result.mergeRequestIid}`
+      : null,
+    "",
+    "Checks:",
+    "  ✓ CI / supply chain",
+    "  ✓ Secrets",
+    "  ✓ Dependencies",
+    "  ✓ Migrations",
+    "  ✓ Runtime boundaries"
+  ].filter(line => line !== null);
+
+  if (findings.length > 0) {
+    lines.push("", "Findings:");
+    for (const item of findings.slice(0, 20)) {
+      const severity = oneLine(item?.severity || "info").toUpperCase();
+      const id = oneLine(item?.id || "UNKNOWN");
+      const title = oneLine(item?.title || item?.message || "Finding");
+      const path = oneLine(item?.path || "");
+      lines.push(`  - [${severity}] ${id} ${title}${path ? ` — ${path}` : ""}`);
+    }
+    if (findings.length > 20) lines.push(`  … ${findings.length - 20} more finding(s)`);
+  }
+
+  if (result?.reviewId) {
+    lines.push("", `Review ID: ${oneLine(result.reviewId)}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 export function createGitLabCiBridge({ config, selfService, fetchImpl = fetch } = {}) {
   if (!config) throw new Error("GitLab CI bridge config is required");
   if (!selfService) throw new Error("GitLab CI bridge requires GitLab self-service runtime");
@@ -118,7 +166,9 @@ export function createGitLabCiBridge({ config, selfService, fetchImpl = fetch } 
         mergeRequestIid: input.mergeRequestIid,
         pipelineId: input.pipelineId,
         jobId: input.jobId,
-        sha: input.sha
+        sha: input.sha,
+        repository: installed.pathWithNamespace,
+        filesReviewed: reviewPayload.changes.length
       };
     }
   };

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createGitLabCiBridge, validateGitLabCiRequest } from "../src/gitlab-ci.mjs";
+import { createGitLabCiBridge, formatGitLabCiConsoleResult, validateGitLabCiRequest } from "../src/gitlab-ci.mjs";
 
 const sha = "b".repeat(40);
 const baseSha = "a".repeat(40);
@@ -128,6 +128,8 @@ test("GitLab Free CI bridge validates job identity and returns Reviewer result",
   assert.equal(result.failed, false);
   assert.equal(result.reviewId, "review-1");
   assert.equal(result.pipelineId, 99);
+  assert.equal(result.repository, "triombus/test");
+  assert.equal(result.filesReviewed, 1);
   assert.equal(calls.length, 2);
 });
 
@@ -182,4 +184,55 @@ test("GitLab CI request validation rejects malformed identifiers", () => {
     jobId: 3,
     sha: "abc"
   }), /commit SHA/);
+});
+
+
+test("GitLab console PASS report stays compact and strips Markdown details", () => {
+  const output = formatGitLabCiConsoleResult({
+    failed: false,
+    findings: [],
+    filesReviewed: 2,
+    repository: "triombus/test",
+    mergeRequestIid: 1,
+    reviewId: "review-pass",
+    report: "### Result\n<details>huge markdown</details>"
+  });
+
+  assert.match(output, /Peerivo Reviewer — PASS/);
+  assert.match(output, /Findings: 0/);
+  assert.match(output, /Files reviewed: 2/);
+  assert.match(output, /Merge request: triombus\/test !1/);
+  assert.match(output, /✓ CI \/ supply chain/);
+  assert.match(output, /Review ID: review-pass/);
+  assert.doesNotMatch(output, /<details>/);
+  assert.doesNotMatch(output, /### Result/);
+});
+
+test("GitLab console BLOCKED report prints concise findings", () => {
+  const output = formatGitLabCiConsoleResult({
+    failed: true,
+    filesReviewed: 3,
+    repository: "triombus/test",
+    mergeRequestIid: 1,
+    reviewId: "review-blocked",
+    findings: [
+      {
+        id: "CI-004",
+        severity: "high",
+        title: "Third-party Action is not pinned",
+        path: ".gitlab-ci.yml"
+      },
+      {
+        id: "SUPPLY-001",
+        severity: "high",
+        message: "Remote content is piped to a shell",
+        path: ".gitlab-ci.yml"
+      }
+    ]
+  });
+
+  assert.match(output, /Peerivo Reviewer — BLOCKED/);
+  assert.match(output, /Findings: 2/);
+  assert.match(output, /\[HIGH\] CI-004 Third-party Action is not pinned — \.gitlab-ci\.yml/);
+  assert.match(output, /\[HIGH\] SUPPLY-001 Remote content is piped to a shell — \.gitlab-ci\.yml/);
 });

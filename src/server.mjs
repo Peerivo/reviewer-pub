@@ -1,7 +1,7 @@
 import http from "node:http";
 import { createApp } from "./app.mjs";
 import { createGitLabApp } from "./gitlab-app.mjs";
-import { createGitLabCiBridge } from "./gitlab-ci.mjs";
+import { createGitLabCiBridge, formatGitLabCiConsoleResult } from "./gitlab-ci.mjs";
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 import { createGitVerseApp } from "./gitverse-app.mjs";
 import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
@@ -416,15 +416,7 @@ export function createServer({
 
         const result = await getGitLabCiBridge().review({ jobToken, request });
         const status = result.failed ? 422 : 200;
-        const headline = result.failed ? "Peerivo Reviewer: BLOCKED" : "Peerivo Reviewer: PASS";
-        const body = [
-          headline,
-          `Findings: ${result.findings.length}`,
-          `Review ID: ${result.reviewId}`,
-          "",
-          result.report
-        ].join("\n");
-        return plain(res, status, body + "\n");
+        return plain(res, status, formatGitLabCiConsoleResult(result));
       }
 
       if (req.method === "POST" && url.pathname === "/webhooks/gitlab") {
