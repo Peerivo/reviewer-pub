@@ -42,6 +42,12 @@ test("GitLab self-service installs projects, refreshes OAuth and disconnects", a
     if (url.pathname === "/api/v4/projects" && options.method === "GET") {
       return Response.json([project]);
     }
+    if (url.pathname === "/api/v4/projects/7" && (options.method || "GET") === "GET") {
+      return Response.json({
+        ...project,
+        permissions: { project_access: null, group_access: { access_level: 40 } }
+      });
+    }
 
     if (url.pathname === "/api/v4/projects/7/hooks" && options.method === "GET") {
       return Response.json([]);
