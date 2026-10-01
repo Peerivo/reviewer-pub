@@ -5,7 +5,7 @@ import { createGitLabCiBridge, formatGitLabCiConsoleResult } from "./gitlab-ci.m
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 import { createGitVerseApp } from "./gitverse-app.mjs";
 import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
-import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadGitVerseOAuthConfigOptional, loadServerConfig } from "./config.mjs";
+import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadGitVerseOAuthConfigOptional, loadServerConfig } from "./config.mjs";\nimport { GITVERSE_REVIEWER_WORKFLOW, GITVERSE_REVIEWER_WORKFLOW_PATH } from "./gitverse-workflow.mjs";
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 const MAX_FORM_BYTES = 256 * 1024;
@@ -503,9 +503,34 @@ export function createServer({
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     const serverConfig = loadServerConfig();
-    const server = createServer();
+    const gitverseOAuthConfig = loadGitVerseOAuthConfigOptional();
+    const gitverseSelfService = gitverseOAuthConfig
+      ? createGitVerseSelfService({ config: gitverseOAuthConfig })
+      : null;
+    const server = createServer({ gitverseOAuthConfig, gitverseSelfService });
     server.listen(serverConfig.port, serverConfig.host, () => {
       process.stdout.write(`Peerivo Reviewer integrations listening on ${serverConfig.host}:${serverConfig.port}\n`);
+
+      const repairRepository = String(process.env.GITVERSE_REPAIR_REPOSITORY || "").trim();
+      if (repairRepository && gitverseSelfService) {
+        const branches = String(process.env.GITVERSE_REPAIR_BRANCHES || "")
+          .split(",")
+          .map(value => value.trim())
+          .filter(Boolean);
+        const touchContent = String(process.env.GITVERSE_REPAIR_TOUCH_CONTENT || "").trim();
+        gitverseSelfService.repairRepository({
+          fullName: repairRepository,
+          branches,
+          workflowPath: GITVERSE_REVIEWER_WORKFLOW_PATH,
+          workflowContent: GITVERSE_REVIEWER_WORKFLOW,
+          touchPath: ".reviewer/gitverse-repair.txt",
+          touchContent: touchContent ? touchContent + "\n" : ""
+        }).then(result => {
+          process.stdout.write(`GitVerse repair completed: ${JSON.stringify(result)}\n`);
+        }).catch(error => {
+          process.stderr.write(`GitVerse repair failed: ${error?.stack || error}\n`);
+        });
+      }
     });
   } catch (error) {
     process.stderr.write(`Peerivo Reviewer integrations failed to start: ${error?.stack || error}\n`);
