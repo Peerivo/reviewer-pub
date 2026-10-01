@@ -28,7 +28,7 @@ async function bestEffortConversationCard(args) {
   try {
     return await upsertConversationCard(args);
   } catch (error) {
-    process.stderr.write(`Peerivo Reviewer conversation card update failed (${error?.status || error?.name || "Error"})\n`);
+    process.stderr.write(`Peerivo Reviewer conversation card update failed (${error?.status || error?.name || "Error"}): ${error?.message || error}\n`);
     return null;
   }
 }
