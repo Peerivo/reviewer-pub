@@ -227,7 +227,7 @@ export class GitLabClient {
     return this.request(`/projects/${projectId(project)}/hooks/${id}`, { method: "DELETE" });
   }
 
-  async setCommitStatus(project, sha, { state, description, ref = "", targetUrl = "" }) {
+  async setCommitStatus(project, sha, { state, description, ref = "", targetUrl = "", pipelineId = null }) {
     const commit = fullSha(sha, "status SHA");
     const allowed = new Set(["pending", "running", "success", "failed", "canceled", "skipped"]);
     if (!allowed.has(state)) throw new GitLabError("invalid commit status state", 400);
@@ -238,6 +238,11 @@ export class GitLabClient {
     });
     if (ref) query.set("ref", String(ref).slice(0, 255));
     if (targetUrl) query.set("target_url", String(targetUrl).slice(0, 255));
+    if (pipelineId !== null) {
+      const id = Number(pipelineId);
+      if (!Number.isSafeInteger(id) || id < 1) throw new GitLabError("invalid pipeline id", 400);
+      query.set("pipeline_id", String(id));
+    }
     return this.request(`/projects/${projectId(project)}/statuses/${commit}?${query}`, { method: "POST" });
   }
 }
