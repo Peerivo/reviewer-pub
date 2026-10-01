@@ -56,7 +56,7 @@ export function createGitLabCiBridge({ config, selfService, fetchImpl = fetch } 
       if (Number(job?.id) !== input.jobId) {
         throw Object.assign(new Error("GitLab CI job identity mismatch"), { status: 403 });
       }
-      if (Number(job?.project?.id) !== input.projectId) {
+      if (Number(job?.pipeline?.project_id) !== input.projectId) {
         throw Object.assign(new Error("GitLab CI project identity mismatch"), { status: 403 });
       }
       if (Number(job?.pipeline?.id) !== input.pipelineId) {
