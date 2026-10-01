@@ -1,0 +1,45 @@
+name: Peerivo Reviewer
+
+# Put this workflow on the protected target branch.
+# It checks out the exact PR head only as data and never executes project code.
+
+on:
+  pull_request_target:
+
+jobs:
+  reviewer:
+    runs-on: ubuntu-latest
+    env:
+      PEERIVO_REVIEWER_API: https://api.reviewer.peerivo.net
+      PEERIVO_REVIEWER_CLIENT_URL: ${{ vars.PEERIVO_REVIEWER_CLIENT_URL }}
+      PEERIVO_REVIEWER_CLIENT_SHA256: ${{ vars.PEERIVO_REVIEWER_CLIENT_SHA256 }}
+      PEERIVO_LICENSE: ${{ secrets.PEERIVO_LICENSE }}
+      PEERIVO_BASE_REF: ${{ github.event.pull_request.base.sha }}
+      PEERIVO_PULL_REQUEST: ${{ github.event.pull_request.number }}
+      PEERIVO_PLATFORM: gitverse
+      PEERIVO_REPOSITORY_VISIBILITY: public
+      GITVERSE_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download pinned Reviewer thin client
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PEERIVO_REVIEWER_CLIENT_URL"
+          test -n "$PEERIVO_REVIEWER_CLIENT_SHA256"
+          curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            "$PEERIVO_REVIEWER_CLIENT_URL" \
+            --output /tmp/peerivo-reviewer-client.mjs
+          printf '%s  %s\n' "$PEERIVO_REVIEWER_CLIENT_SHA256" /tmp/peerivo-reviewer-client.mjs \
+            | sha256sum --check --strict
+
+      - name: Review without executing project code
+        run: node /tmp/peerivo-reviewer-client.mjs
