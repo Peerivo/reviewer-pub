@@ -88,7 +88,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
     async repositorySelection(sessionToken) {
       const installation = requireSession(sessionToken);
       const { installation: fresh, gitverse } = await installationClient(installation);
-      const repositories = await gitverse.manageableRepositories({ maxRepositories: config.maxDiscoverRepositories });
+      const repositories = await gitverse.manageableRepositories({ maxRepositories: config.maxDiscoverRepositories, login: fresh.login });
       const selected = new Set(installationStore.listRepositories(fresh.id).map(item => item.repositoryId));
       return {
         login: fresh.login,
@@ -120,7 +120,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       }
 
       const { installation: fresh, gitverse } = await installationClient(installation);
-      const manageable = await gitverse.manageableRepositories({ maxRepositories: config.maxDiscoverRepositories });
+      const manageable = await gitverse.manageableRepositories({ maxRepositories: config.maxDiscoverRepositories, login: fresh.login });
       const allowed = new Map();
       for (const item of manageable) {
         if (Number.isSafeInteger(item?.id) && item.id > 0
