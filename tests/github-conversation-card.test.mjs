@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { upsertConversationCard } from "../src/app.mjs";
+import { buildConversationCard, upsertConversationCard } from "../src/app.mjs";
 
 test("conversation card updates the existing Peerivo Reviewer bot comment", async () => {
   const calls = [];
@@ -71,4 +71,41 @@ test("conversation card ignores a spoofed user marker and creates the bot card",
   assert.equal(calls.length, 1);
   assert.equal(calls[0].kind, "create");
   assert.match(calls[0].body, /⛔ BLOCKED/);
+});
+
+
+test("compact PASS card keeps details in the Reviewer check", () => {
+  const body = buildConversationCard({
+    state: "passed",
+    findings: 0,
+    files: 2,
+    checkUrl: "https://github.com/acme/widget/runs/123"
+  });
+  assert.match(body, /✅ PASS/);
+  assert.match(body, /0 findings · 2 files reviewed/);
+  assert.match(body, /Open Peerivo Reviewer check/);
+  assert.doesNotMatch(body, /Coverage/);
+  assert.doesNotMatch(body, /Technical details/);
+});
+
+test("compact blocking card links to the exact Reviewer check", () => {
+  const body = buildConversationCard({
+    state: "blocked",
+    findings: 2,
+    files: 3,
+    checkUrl: "https://github.com/acme/widget/runs/456"
+  });
+  assert.match(body, /⛔ BLOCKED/);
+  assert.match(body, /2 findings · 3 files reviewed/);
+  assert.match(body, /https:\/\/github\.com\/acme\/widget\/runs\/456/);
+});
+
+test("running card stays minimal", () => {
+  const body = buildConversationCard({
+    state: "running",
+    checkUrl: "https://github.com/acme/widget/runs/789"
+  });
+  assert.match(body, /Review in progress/);
+  assert.match(body, /Open Peerivo Reviewer check/);
+  assert.doesNotMatch(body, /report will update/i);
 });

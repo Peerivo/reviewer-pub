@@ -2,12 +2,50 @@ import { verifyWebhookSignature } from "./crypto.mjs";
 import { GitHubClient } from "./github.mjs";
 import { collectReviewPayload, shouldReviewPullRequestAction, submitReview } from "./reviewer.mjs";
 
-const CHECK_NAME = "Security review";
+const CHECK_NAME = "Peerivo Reviewer";
 const COMMENT_MARKER = "<!-- peerivo-reviewer-card -->";
 
 function truncate(text, max = 60000) {
   const value = String(text || "");
   return value.length <= max ? value : `${value.slice(0, max)}\n\n…truncated`;
+}
+
+export function buildConversationCard({ state, findings = 0, files = null, checkUrl = "" }) {
+  const normalizedFindings = Number.isSafeInteger(findings) && findings >= 0 ? findings : 0;
+  const normalizedFiles = Number.isSafeInteger(files) && files >= 0 ? files : null;
+  const link = checkUrl ? `[Open Peerivo Reviewer check →](${checkUrl})` : "";
+
+  if (state === "running") {
+    return [
+      "> [!NOTE]",
+      "> **Review in progress**",
+      "",
+      link
+    ].filter(Boolean).join("\n");
+  }
+
+  if (state === "failed_closed") {
+    return [
+      "> [!WARNING]",
+      "> **⚠️ REVIEW FAILED CLOSED**",
+      "",
+      link
+    ].filter(Boolean).join("\n");
+  }
+
+  const blocked = state === "blocked";
+  const summary = normalizedFiles === null
+    ? `${normalizedFindings} finding${normalizedFindings === 1 ? "" : "s"}`
+    : `${normalizedFindings} finding${normalizedFindings === 1 ? "" : "s"} · ${normalizedFiles} file${normalizedFiles === 1 ? "" : "s"} reviewed`;
+
+  return [
+    blocked ? "> [!CAUTION]" : "> [!TIP]",
+    blocked ? "> **⛔ BLOCKED**" : "> **✅ PASS**",
+    "",
+    summary,
+    "",
+    link
+  ].filter(Boolean).join("\n");
 }
 
 export async function upsertConversationCard({ github, repo, pullNumber, token, appId, body }) {
@@ -82,6 +120,9 @@ export function createApp({ config, fetchImpl = fetch }) {
       });
       const checkId = check?.id;
       if (!Number.isSafeInteger(checkId) || checkId < 1) throw new Error("GitHub did not return a check run id");
+      const checkUrl = typeof check?.html_url === "string" && check.html_url
+        ? check.html_url
+        : `https://github.com/${repo}/runs/${checkId}`;
 
       await bestEffortConversationCard({
         github,
@@ -89,12 +130,10 @@ export function createApp({ config, fetchImpl = fetch }) {
         pullNumber,
         token,
         appId: config.githubAppId,
-        body: [
-          "> [!NOTE]",
-          "> **Review in progress** — security analysis is running.",
-          "",
-          "The report will update automatically when the review completes."
-        ].join("\n")
+        body: buildConversationCard({
+          state: "running",
+          checkUrl
+        })
       });
 
       try {
@@ -137,7 +176,12 @@ export function createApp({ config, fetchImpl = fetch }) {
           pullNumber,
           token,
           appId: config.githubAppId,
-          body: review.report
+          body: buildConversationCard({
+            state: review.failed ? "blocked" : "passed",
+            findings: review.findings.length,
+            files: reviewPayload.changes.length,
+            checkUrl
+          })
         });
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
       } catch (error) {
@@ -162,7 +206,10 @@ export function createApp({ config, fetchImpl = fetch }) {
           pullNumber,
           token,
           appId: config.githubAppId,
-          body: failedClosedReport
+          body: buildConversationCard({
+            state: "failed_closed",
+            checkUrl
+          })
         });
         throw error;
       }
