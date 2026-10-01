@@ -68,15 +68,40 @@ function findingBlock(item, index, { webBaseUrl = "", repo = "", headSha = "" } 
   return lines.join("\n");
 }
 
-async function upsertComment(gitverse, repo, pullNumber, body) {
-  const comments = await gitverse.listComments(repo, pullNumber);
-  const existing = [...comments].reverse().find(comment =>
-    Number.isSafeInteger(comment?.id)
-    && typeof comment?.body === "string"
-    && comment.body.includes(COMMENT_MARKER)
-  );
-  if (existing) return gitverse.updateComment(repo, pullNumber, existing.id, body);
-  return gitverse.createComment(repo, pullNumber, body);
+async function upsertComment(selfService, gitverse, repositoryId, repo, pullNumber, body) {
+  const knownId = selfService.getReviewCommentId(repositoryId, pullNumber);
+  if (knownId) {
+    try {
+      return await gitverse.updateComment(repo, pullNumber, knownId, body);
+    } catch (error) {
+      if (error?.status !== 404) throw error;
+      selfService.deleteReviewCommentId(repositoryId, pullNumber);
+    }
+  }
+
+  try {
+    const comments = await gitverse.listComments(repo, pullNumber);
+    const existing = [...comments].reverse().find(comment =>
+      Number.isSafeInteger(comment?.id)
+      && typeof comment?.body === "string"
+      && comment.body.includes(COMMENT_MARKER)
+    );
+    if (existing) {
+      const updated = await gitverse.updateComment(repo, pullNumber, existing.id, body);
+      selfService.setReviewCommentId(repositoryId, pullNumber, existing.id);
+      return updated;
+    }
+  } catch (error) {
+    // GitVerse currently returns 500 for comment listing on some pull requests.
+    // Creation still works, so keep the integration fail-safe and remember our own id.
+    if (error?.status !== 500) throw error;
+  }
+
+  const created = await gitverse.createComment(repo, pullNumber, body);
+  if (Number.isSafeInteger(created?.id) && created.id > 0) {
+    selfService.setReviewCommentId(repositoryId, pullNumber, created.id);
+  }
+  return created;
 }
 
 function checkLink(checkUrl) {
@@ -161,7 +186,7 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
       const headSha = String(pr?.head?.sha || "").toLowerCase();
       if (!/^[0-9a-f]{40}$/.test(headSha)) throw new Error("GitVerse returned invalid PR head SHA");
 
-      await upsertComment(gitverse, repo, pullNumber, pendingBody({ checkUrl }));
+      await upsertComment(selfService, gitverse, installedRepositoryId, repo, pullNumber, pendingBody({ checkUrl }));
 
       try {
         const reviewPayload = await collectGitVerseReviewPayload({
@@ -190,7 +215,9 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
         });
 
         await upsertComment(
+          selfService,
           gitverse,
+          installedRepositoryId,
           repo,
           pullNumber,
           resultBody(review, reviewPayload.changes.length, {
@@ -202,7 +229,7 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
         );
         return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
       } catch (error) {
-        try { await upsertComment(gitverse, repo, pullNumber, failClosedBody({ checkUrl })); } catch {}
+        try { await upsertComment(selfService, gitverse, installedRepositoryId, repo, pullNumber, failClosedBody({ checkUrl })); } catch {}
         throw error;
       }
     }

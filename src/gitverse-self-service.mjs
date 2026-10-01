@@ -265,6 +265,18 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       };
     },
 
+    getReviewCommentId(repositoryId, pullNumber) {
+      return installationStore.getReviewCommentId(repositoryId, pullNumber);
+    },
+
+    setReviewCommentId(repositoryId, pullNumber, commentId) {
+      return installationStore.setReviewCommentId(repositoryId, pullNumber, commentId);
+    },
+
+    deleteReviewCommentId(repositoryId, pullNumber) {
+      return installationStore.deleteReviewCommentId(repositoryId, pullNumber);
+    },
+
     authenticateRepositoryWebhook({ repositoryId: rawRepositoryId, authorizationHeader }) {
       const id = repositoryId(rawRepositoryId);
       const record = installationStore.getRepository(id);

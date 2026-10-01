@@ -69,6 +69,13 @@ export class GitVerseInstallationStore {
       );
       CREATE INDEX IF NOT EXISTS gitverse_repositories_installation_idx
         ON gitverse_repositories(installation_id, active);
+      CREATE TABLE IF NOT EXISTS gitverse_review_comments (
+        repository_id INTEGER NOT NULL,
+        pull_number INTEGER NOT NULL,
+        comment_id INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (repository_id, pull_number)
+      );
     `);
   }
 
@@ -269,8 +276,42 @@ export class GitVerseInstallationStore {
     return this.getRepository(id);
   }
 
+  getReviewCommentId(repositoryId, pullNumber) {
+    const repository = positiveId(repositoryId, "GitVerse repository id");
+    const pull = positiveId(pullNumber, "GitVerse pull request number");
+    const row = this.db.prepare(
+      "SELECT comment_id FROM gitverse_review_comments WHERE repository_id = ? AND pull_number = ?"
+    ).get(repository, pull);
+    return row?.comment_id || null;
+  }
+
+  setReviewCommentId(repositoryId, pullNumber, commentId) {
+    const repository = positiveId(repositoryId, "GitVerse repository id");
+    const pull = positiveId(pullNumber, "GitVerse pull request number");
+    const comment = positiveId(commentId, "GitVerse comment id");
+    this.db.prepare(`
+      INSERT INTO gitverse_review_comments (repository_id, pull_number, comment_id, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(repository_id, pull_number) DO UPDATE SET
+        comment_id = excluded.comment_id,
+        updated_at = excluded.updated_at
+    `).run(repository, pull, comment, this.clock());
+    return comment;
+  }
+
+  deleteReviewCommentId(repositoryId, pullNumber) {
+    this.db.prepare(
+      "DELETE FROM gitverse_review_comments WHERE repository_id = ? AND pull_number = ?"
+    ).run(
+      positiveId(repositoryId, "GitVerse repository id"),
+      positiveId(pullNumber, "GitVerse pull request number")
+    );
+  }
+
   deleteRepository(repositoryId) {
-    this.db.prepare("DELETE FROM gitverse_repositories WHERE repository_id = ?").run(positiveId(repositoryId, "GitVerse repository id"));
+    const id = positiveId(repositoryId, "GitVerse repository id");
+    this.db.prepare("DELETE FROM gitverse_review_comments WHERE repository_id = ?").run(id);
+    this.db.prepare("DELETE FROM gitverse_repositories WHERE repository_id = ?").run(id);
   }
 
   deleteInstallation(installationId) {
