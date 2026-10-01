@@ -69,6 +69,10 @@ export class GitHubClient {
     if (!payload || typeof payload.token !== "string" || !payload.token) {
       throw new GitHubError("GitHub did not return an installation token", 502);
     }
+    const permissions = payload && typeof payload.permissions === "object" && payload.permissions
+      ? Object.entries(payload.permissions).map(([name, level]) => `${name}:${level}`).sort().join(",")
+      : "(not-reported)";
+    process.stderr.write(`Peerivo Reviewer installation permissions ${installationId}: ${permissions}\n`);
     return payload.token;
   }
 
