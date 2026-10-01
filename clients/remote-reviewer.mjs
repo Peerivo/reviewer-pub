@@ -2,6 +2,73 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
+const ANSI_GREEN = "\u001b[32m";
+const ANSI_RED = "\u001b[31m";
+const ANSI_RESET = "\u001b[0m";
+
+function compact(value, max = 360) {
+  const text = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+  return text.length <= max ? text : text.slice(0, max - 1) + "…";
+}
+
+function fallbackRemediation(id) {
+  const rule = String(id || "").toUpperCase();
+  if (/^(?:CI-|SUPPLY-)/.test(rule)) return "Remove the unsafe CI or supply-chain pattern and rerun Peerivo Reviewer.";
+  if (/^SEC-/.test(rule)) return "Remove and rotate the credential if real, then use the platform secret store.";
+  if (/^DEPS-/.test(rule)) return "Regenerate and commit the lockfile together with the manifest change.";
+  if (/^DB-/.test(rule)) return "Add an explicit migration-capable CI execution path.";
+  return "Resolve the reported risk and rerun Peerivo Reviewer.";
+}
+
+function remoteBlobUrl(platform, repository, sha, path) {
+  if (!/^[0-9a-f]{40}$/i.test(String(sha || "")) || !path) return "";
+  const repo = String(repository || "").split("/").map(encodeURIComponent).join("/");
+  const file = String(path).split("/").map(encodeURIComponent).join("/");
+  if (platform === "gitverse") return `https://gitverse.ru/${repo}/blob/${sha}/${file}`;
+  if (platform === "github") return `https://github.com/${repo}/blob/${sha}/${file}`;
+  return "";
+}
+
+export function formatRemoteConsoleResult(result, { platform, repository, headSha, changedFiles = null } = {}) {
+  const findings = Array.isArray(result?.findings) ? result.findings : [];
+  const blocked = result?.failed === true;
+  const lines = [
+    blocked
+      ? `${ANSI_RED}Peerivo Reviewer — BLOCKED${ANSI_RESET}`
+      : `${ANSI_GREEN}Peerivo Reviewer — PASS${ANSI_RESET}`,
+    "",
+    `Findings: ${findings.length}`,
+    Number.isSafeInteger(changedFiles) && changedFiles >= 0 ? `Files reviewed: ${changedFiles}` : null,
+    ""
+  ].filter(value => value !== null);
+
+  if (findings.length) {
+    lines.push("Findings:");
+    findings.slice(0, 20).forEach((item, index) => {
+      const severity = compact(item?.severity || "info", 32).toUpperCase();
+      const id = compact(item?.id || "FINDING", 64);
+      const title = compact(item?.title || item?.message || "Reviewer finding", 220);
+      const path = compact(item?.path || "", 240);
+      const why = compact(item?.message || title);
+      const fix = compact(item?.remediation || fallbackRemediation(id));
+      const open = remoteBlobUrl(platform, repository, headSha, path);
+      lines.push(
+        "",
+        `  ${index + 1}. ${ANSI_RED}[${severity}] ${id}${ANSI_RESET} ${title}`,
+        path ? `     File: ${path}` : null,
+        open ? `     Open: ${open}` : null,
+        `     Why:  ${why}`,
+        `     Fix:  ${fix}`
+      );
+    });
+    if (findings.length > 20) lines.push("", `  … ${findings.length - 20} more finding(s)`);
+    lines.push("");
+  }
+
+  if (result?.reviewId) lines.push(`Review ID: ${compact(result.reviewId, 120)}`, "");
+  return lines.filter(value => value !== null).join("\n");
+}
+
 function git(args, options = {}) {
   return execFileSync("git", args, {
     encoding: options.encoding === undefined ? "utf8" : options.encoding,
@@ -198,11 +265,19 @@ export async function main() {
   if (!response.ok) {
     throw new Error(`Reviewer API denied review (${response.status}): ${result?.message || result?.reason || "error"}`);
   }
-  if (result?.schemaVersion !== 1 || typeof result?.failed !== "boolean" || typeof result?.report !== "string") {
+  if (result?.schemaVersion !== 1
+    || typeof result?.failed !== "boolean"
+    || typeof result?.report !== "string"
+    || !Array.isArray(result?.findings)) {
     throw new Error("Reviewer API returned an invalid response schema");
   }
 
-  process.stdout.write(result.report + "\n");
+  process.stdout.write(formatRemoteConsoleResult(result, {
+    platform,
+    repository,
+    headSha,
+    changedFiles: changes.length
+  }) + "\n");
   if (result.failed) process.exitCode = 1;
 }
 
