@@ -5,7 +5,8 @@ import { createGitLabCiBridge, formatGitLabCiConsoleResult } from "./gitlab-ci.m
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 import { createGitVerseApp } from "./gitverse-app.mjs";
 import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
-import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadGitVerseOAuthConfigOptional, loadServerConfig } from "./config.mjs";\nimport { GITVERSE_REVIEWER_WORKFLOW, GITVERSE_REVIEWER_WORKFLOW_PATH } from "./gitverse-workflow.mjs";
+import { loadConfig, loadGitLabConfig, loadGitLabOAuthConfigOptional, loadGitVerseOAuthConfigOptional, loadServerConfig } from "./config.mjs";
+import { GITVERSE_REVIEWER_WORKFLOW, GITVERSE_REVIEWER_WORKFLOW_PATH } from "./gitverse-workflow.mjs";
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 const MAX_FORM_BYTES = 256 * 1024;
