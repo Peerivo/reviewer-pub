@@ -120,7 +120,7 @@ export function loadGitLabOAuthConfig(env = process.env) {
     installationsDb: required(env, "GITLAB_INSTALLATIONS_DB"),
     tokenEncryptionKey,
     oauthStateTtlMs: integer(env, "GITLAB_OAUTH_STATE_TTL_MS", 10 * 60 * 1000, { min: 60_000, max: 60 * 60 * 1000 }),
-    installSessionTtlMs: integer(env, "GITLAB_INSTALL_SESSION_TTL_MS", 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 24 * 60 * 60 * 1000 }),
+    installSessionTtlMs: integer(env, "GITLAB_INSTALL_SESSION_TTL_MS", 30 * 24 * 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 90 * 24 * 60 * 60 * 1000 }),
     maxDiscoverProjects: integer(env, "GITLAB_MAX_DISCOVER_PROJECTS", 1000, { min: 1, max: 5000 }),
     maxInstallProjects: integer(env, "GITLAB_MAX_INSTALL_PROJECTS", 100, { min: 1, max: 1000 })
   });
@@ -155,7 +155,7 @@ export function loadGitVerseOAuthConfig(env = process.env) {
     installationsDb: required(env, "GITVERSE_INSTALLATIONS_DB"),
     tokenEncryptionKey,
     oauthStateTtlMs: integer(env, "GITVERSE_OAUTH_STATE_TTL_MS", 10 * 60 * 1000, { min: 60_000, max: 60 * 60 * 1000 }),
-    installSessionTtlMs: integer(env, "GITVERSE_INSTALL_SESSION_TTL_MS", 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 24 * 60 * 60 * 1000 }),
+    installSessionTtlMs: integer(env, "GITVERSE_INSTALL_SESSION_TTL_MS", 30 * 24 * 60 * 60 * 1000, { min: 5 * 60 * 1000, max: 90 * 24 * 60 * 60 * 1000 }),
     maxDiscoverRepositories: integer(env, "GITVERSE_MAX_DISCOVER_REPOSITORIES", 1000, { min: 1, max: 5000 }),
     maxInstallRepositories: integer(env, "GITVERSE_MAX_INSTALL_REPOSITORIES", 100, { min: 1, max: 1000 })
   });
