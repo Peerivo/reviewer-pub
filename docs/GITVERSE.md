@@ -66,7 +66,7 @@ A valid webhook is only a notification. Reviewer authenticates the repository-sc
 
 Incomplete text patches, truncated trees, invalid SHA values, collection limits, token errors and Reviewer API errors fail closed.
 
-The hosted integration upserts one marked **Peerivo Reviewer** comment on the pull request with checking/pass/blocking/fail-closed state.
+The hosted integration upserts one marked **Peerivo Reviewer** comment on the pull request with checking/pass/blocking/fail-closed state. Blocking findings include the exact file, a link to that file at the reviewed commit SHA, a short explanation of why the pattern is risky, and the recommended remediation.
 
 ## Hard merge gate
 
@@ -78,7 +78,7 @@ The public example pins both the client URL and SHA-256 to an immutable reviewer
 Secret: PEERIVO_LICENSE
 ```
 
-The client exits non-zero when Reviewer reports a finding at or above the configured blocking threshold, and exits with code 2 when coverage or service validation fails closed.
+The client exits non-zero when Reviewer reports a finding at or above the configured blocking threshold, and exits with code 2 when coverage or service validation fails closed. Its console report uses the same actionable format as the hosted comment: severity/rule, file, immutable file link, why, and fix.
 
 ### E2E blocking fixture
 
