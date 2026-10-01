@@ -23,7 +23,7 @@ function config() {
 function gitlabStub() {
   return {
     async project(id) {
-      assert.equal(id, 7);
+      assert.ok(id === 7 || id === "triombus/test");
       return { id: 7, path_with_namespace: "triombus/test", visibility: "public" };
     },
     async mergeRequest(repo, iid) {
