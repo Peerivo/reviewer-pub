@@ -1,0 +1,47 @@
+spec:
+  inputs:
+    job-name:
+      default: "Peerivo Reviewer"
+      description: "GitLab job name"
+    stage:
+      default: ".pre"
+      description: "Pipeline stage for Peerivo Reviewer"
+---
+"$[[ inputs.job-name ]]":
+  stage: $[[ inputs.stage ]]
+  image: curlimages/curl:8.12.1
+  interruptible: true
+  allow_failure: false
+  variables:
+    GIT_STRATEGY: "none"
+  script:
+    - |
+      set -eu
+
+      cat > /tmp/peerivo-review.json <<JSON
+      {
+        "projectId": ${CI_PROJECT_ID},
+        "mergeRequestIid": ${CI_MERGE_REQUEST_IID},
+        "pipelineId": ${CI_PIPELINE_ID},
+        "jobId": ${CI_JOB_ID},
+        "sha": "${CI_COMMIT_SHA}"
+      }
+      JSON
+
+      STATUS="$(curl --silent --show-error \
+        --output /tmp/peerivo-review.txt \
+        --write-out "%{http_code}" \
+        --request POST \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --data-binary @/tmp/peerivo-review.json \
+        "https://pub.reviewer.peerivo.net/v1/ci/gitlab/review")"
+
+      cat /tmp/peerivo-review.txt
+
+      if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+        exit 0
+      fi
+      exit 1
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
