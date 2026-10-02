@@ -5,6 +5,7 @@ import { createGitVerseSelfService } from "../src/gitverse-self-service.mjs";
 test("GitVerse self-service connects repositories, refreshes tokens and disconnects", async () => {
   let now = Date.parse("2026-09-30T12:00:00Z");
   const calls = [];
+  let entitlementProvisioned = 0;
   let workflowInstalled = false;
   let gateSecretInstalled = false;
   const workflowSha = "a".repeat(40);
@@ -22,6 +23,28 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   const fetchImpl = async (input, options = {}) => {
     const url = new URL(String(input));
     calls.push({ url: url.toString(), options });
+
+    if (url.origin === "https://reviewer.example.com" && url.pathname === "/v1/hosted/entitlements/ensure") {
+      assert.equal(options.method, "POST");
+      assert.equal(options.headers.authorization, "Bearer reviewer-service-token-0123456789abcdef");
+      const body = JSON.parse(options.body);
+      assert.equal(body.platform, "gitverse");
+      assert.equal(body.gitverseRepositoryId, 77);
+      assert.equal(body.customer, "oleg");
+      entitlementProvisioned += 1;
+      return Response.json({
+        schemaVersion: 1,
+        created: entitlementProvisioned === 1,
+        source: "hosted-trial",
+        entitlement: {
+          id: "entitlement-77",
+          plan: "starter",
+          repositoryLimit: 1,
+          startsAt: "2026-09-30T12:00:00.000Z",
+          endsAt: "2026-10-14T12:00:00.000Z"
+        }
+      }, { status: entitlementProvisioned === 1 ? 201 : 200 });
+    }
 
     if (url.origin === "https://gitverse.ru" && url.pathname === "/login/oauth/access_token") {
       const grant = options.body.get("grant_type");
@@ -112,7 +135,10 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
       oauthStateTtlMs: 600000,
       installSessionTtlMs: 3600000,
       maxDiscoverRepositories: 100,
-      maxInstallRepositories: 10
+      maxInstallRepositories: 10,
+      reviewerApiUrl: "https://reviewer.example.com",
+      reviewerApiToken: "reviewer-service-token-0123456789abcdef",
+      reviewTimeoutMs: 30000
     },
     fetchImpl,
     clock: () => now
@@ -140,6 +166,10 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   });
   assert.deepEqual(applied.installed, ["peerivo/demo"]);
   assert.equal(applied.hardGateCount, 1);
+  assert.equal(applied.access.length, 1);
+  assert.equal(applied.access[0].mode, "trial");
+  assert.equal(applied.access[0].plan, "starter");
+  assert.equal(entitlementProvisioned, 1);
   assert.equal(workflowInstalled, true);
   assert.equal(gateSecretInstalled, true);
 
