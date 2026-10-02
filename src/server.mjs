@@ -146,21 +146,53 @@ function repositoriesPage(selection, { updated = false } = {}) {
     return `<label class="project"><input type="checkbox" name="repository" value="${repository.id}"${checked}><span><strong>${escapeHtml(repository.fullName)}</strong><small>${escapeHtml(repository.name)}${detail}</small></span></label>`;
   }).join("");
 
+  const selected = selection.repositories.filter(repository => repository.selected);
+  const selectedLinks = selected.map(repository => {
+    const href = `https://gitverse.ru/${String(repository.fullName).split("/").map(encodeURIComponent).join("/")}`;
+    return `<a class="repo-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(repository.fullName)} ↗</a>`;
+  }).join("");
+
+  const success = updated
+    ? selected.length > 0
+      ? `<section class="success" role="status">
+          <div class="success-mark">✓</div>
+          <div>
+            <h2>Peerivo Reviewer connected</h2>
+            <p>Settings saved. Reviewer is enabled for ${selected.length} ${selected.length === 1 ? "repository" : "repositories"} and will run on new or updated pull requests.</p>
+            <div class="connected-repos">${selectedLinks}</div>
+            <div class="success-actions">
+              <a class="button primary" href="${escapeHtml(`https://gitverse.ru/${String(selected[0].fullName).split("/").map(encodeURIComponent).join("/")}`)}" target="_blank" rel="noopener">Open repository</a>
+              <a class="button secondary-link" href="/gitverse/repositories">Manage repositories</a>
+            </div>
+          </div>
+        </section>`
+      : `<section class="success neutral" role="status">
+          <div class="success-mark">✓</div>
+          <div>
+            <h2>GitVerse settings saved</h2>
+            <p>No repositories are selected. Peerivo Reviewer is not active for any GitVerse repository yet.</p>
+          </div>
+        </section>`
+    : "";
+
   return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Connect GitVerse · Peerivo Reviewer</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:860px;margin:7vh auto;padding:0 24px;line-height:1.5;color:#18181b}
-h1{font-size:2rem;margin-bottom:.4rem}p{color:#52525b}.notice{padding:12px 14px;background:#f4f4f5;border-radius:10px}
+h1{font-size:2rem;margin-bottom:.4rem}h2{margin:.1rem 0 .35rem;font-size:1.35rem}p{color:#52525b}
+.success{display:grid;grid-template-columns:auto 1fr;gap:14px;padding:18px 20px;margin:20px 0 28px;border:1px solid #86efac;background:#f0fdf4;border-radius:14px}
+.success.neutral{border-color:#d4d4d8;background:#fafafa}.success-mark{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:#16a34a;color:white;font-weight:800;font-size:1.1rem}
+.success p{margin:.2rem 0 .8rem}.connected-repos{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.repo-link{padding:6px 9px;background:white;border:1px solid #bbf7d0;border-radius:8px;text-decoration:none;color:#166534;font-weight:650}
+.success-actions,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button,button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;text-decoration:none;cursor:pointer}
+.primary,button{background:#18181b;color:white}.secondary-link{background:white;color:#18181b}
 .projects{display:grid;gap:8px;margin:24px 0}.project{display:flex;gap:12px;padding:12px;border:1px solid #e4e4e7;border-radius:10px;align-items:flex-start}
-.project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}
-.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;background:#18181b;color:white;cursor:pointer}
-.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
+.project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
 </style>
 <h1>Connect GitVerse</h1>
 <p>Signed in as <strong>${escapeHtml(selection.login)}</strong>. Select repositories where Peerivo Reviewer should review pull requests.</p>
-${updated ? '<p class="notice">GitVerse installation updated.</p>' : ""}
+${success}
 <form method="post" action="/gitverse/repositories">
 <input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
 <div class="projects">${rows || "<p>No Owner/Admin repositories are available to this account.</p>"}</div>
