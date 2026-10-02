@@ -2,6 +2,7 @@ import http from "node:http";
 import { createApp } from "./app.mjs";
 import { createGitLabApp } from "./gitlab-app.mjs";
 import { createGitLabCiBridge, formatGitLabCiConsoleResult } from "./gitlab-ci.mjs";
+import { bootstrapGitLabCatalog } from "./gitlab-catalog-bootstrap.mjs";
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 import { createGitVerseApp } from "./gitverse-app.mjs";
 import { createGitVerseSelfService } from "./gitverse-self-service.mjs";
@@ -617,13 +618,28 @@ export function createServer({
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     const serverConfig = loadServerConfig();
+    const gitlabOAuthConfig = loadGitLabOAuthConfigOptional();
     const gitverseOAuthConfig = loadGitVerseOAuthConfigOptional();
     const gitverseSelfService = gitverseOAuthConfig
       ? createGitVerseSelfService({ config: gitverseOAuthConfig })
       : null;
-    const server = createServer({ gitverseOAuthConfig, gitverseSelfService });
+    const server = createServer({ gitlabOAuthConfig, gitverseOAuthConfig, gitverseSelfService });
     server.listen(serverConfig.port, serverConfig.host, () => {
       process.stdout.write(`Peerivo Reviewer integrations listening on ${serverConfig.host}:${serverConfig.port}\n`);
+
+      const catalogOwner = String(process.env.GITLAB_CATALOG_BOOTSTRAP_OWNER || "").trim();
+      if (catalogOwner && gitlabOAuthConfig) {
+        bootstrapGitLabCatalog({
+          oauthConfig: gitlabOAuthConfig,
+          ownerUsername: catalogOwner,
+          projectPath: String(process.env.GITLAB_CATALOG_BOOTSTRAP_PROJECT || "peerivo-reviewer").trim(),
+          version: String(process.env.GITLAB_CATALOG_BOOTSTRAP_VERSION || "1.0.0").trim()
+        }).then(result => {
+          process.stdout.write(`GitLab Catalog bootstrap completed: ${JSON.stringify(result)}\n`);
+        }).catch(error => {
+          process.stderr.write(`GitLab Catalog bootstrap failed: ${error?.stack || error}\n`);
+        });
+      }
 
       const repairRepository = String(process.env.GITVERSE_REPAIR_REPOSITORY || "").trim();
       if (repairRepository && gitverseSelfService) {
