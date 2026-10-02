@@ -1,11 +1,11 @@
 # GitVerse setup
 
-Peerivo Reviewer supports GitVerse through two complementary modes:
+Peerivo Reviewer supports GitVerse through one OAuth installation with two capabilities:
 
-1. **Hosted OAuth installation** — recommended for self-service onboarding and authoritative server-side review.
-2. **Checksum-pinned CI thin client** — optional hard merge gate for teams that want the Reviewer result to fail a GitVerse CI job.
+1. **Hosted review** — authoritative server-side review with one updating Reviewer card in the pull request.
+2. **Hard Merge Gate** — optional CI gate provisioned by the same installer. No workflow or secret is copied by the customer.
 
-The proprietary analyzer remains in the private Reviewer service in both standard hosted modes.
+The proprietary analyzer remains in the private Reviewer service.
 
 ## Hosted OAuth installation
 
@@ -45,13 +45,21 @@ Customers start at:
 GET /connect/gitverse
 ```
 
-After OAuth, Reviewer lists repositories where the account reports admin permission. The customer selects repositories and Reviewer creates a `pull_request` webhook for each one.
+After OAuth, Reviewer lists repositories where the account reports admin permission. The customer selects repositories and can enable **Block merge on HIGH/CRITICAL** before saving.
 
-Each selected repository receives:
+For every selected repository Reviewer creates:
 
-- a repository-scoped webhook URL: `/webhooks/gitverse/<repository-id>`;
-- a separate random Authorization credential;
+- a repository-scoped `pull_request` webhook;
+- a separate random webhook Authorization credential;
 - an encrypted OAuth-token binding to the installation.
+
+When Hard Merge Gate is enabled, Reviewer additionally:
+
+- generates a separate repository-scoped CI credential;
+- stores it as the GitVerse Actions secret `PEERIVO_GATE_TOKEN`;
+- writes `.gitverse/workflows/reviewer.yml` to the repository default branch.
+
+The user never needs to copy YAML or secret values.
 
 ## Review flow
 
@@ -70,15 +78,23 @@ The hosted integration upserts one marked **Peerivo Reviewer** comment on the pu
 
 ## Hard merge gate
 
-For a hard CI gate, use `examples/gitverse.yml`. The workflow downloads the public source-transparent collector from `clients/remote-reviewer.mjs`, verifies its SHA-256, checks out the exact PR head only as Git data and submits a bounded review payload to `https://api.reviewer.peerivo.net`.
-
-The public example pins both the client URL and SHA-256 to an immutable reviewer-pub commit. The customer repository only needs this secret:
+The OAuth installer can provision the hard gate automatically. The installed workflow sends only the repository identity, pull-request number and expected head SHA to:
 
 ```text
-Secret: PEERIVO_LICENSE
+POST https://pub.reviewer.peerivo.net/v1/ci/gitverse/review
 ```
 
-The client exits non-zero when Reviewer reports a finding at or above the configured blocking threshold, and exits with code 2 when coverage or service validation fails closed. Its console report uses the same actionable format as the hosted comment: severity/rule, file, immutable file link, why, and fix.
+The request is authenticated with the repository-scoped `PEERIVO_GATE_TOKEN`. Reviewer validates that token against the installed repository, re-fetches the pull request and all bounded review inputs through the GitVerse Public API, verifies that the PR head still matches the CI event, and then runs the private analyzer.
+
+The workflow does not checkout or execute customer code.
+
+Exit behavior:
+
+- HTTP 200 → Reviewer PASS → CI job succeeds;
+- HTTP 422 → blocking finding at the configured threshold → CI job fails;
+- authentication, stale head, API, collection or service errors → fail closed.
+
+Disabling the hard gate through the installer removes the workflow and repository secret. Disconnect also attempts to remove both before deleting the installation.
 
 ### E2E blocking fixture
 
@@ -100,7 +116,7 @@ The fixture is deliberately small and deterministic. Do not merge it into the pr
 
 OAuth access tokens are refreshed server-side before expiry and rotated refresh tokens are encrypted at rest.
 
-Disconnect removes configured Reviewer webhooks and the local installation. GitVerse currently exposes user-side revocation under **Settings → Authorized Applications**; the integration therefore tells the user to revoke the OAuth grant there after disconnect when complete revocation is required.
+Disconnect removes configured Reviewer webhooks, provisioned hard-gate workflow/secrets, and the local installation. GitVerse currently exposes user-side revocation under **Settings → Authorized Applications**; the integration therefore tells the user to revoke the OAuth grant there after disconnect when complete revocation is required.
 
 ## Security boundary
 

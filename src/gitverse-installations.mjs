@@ -63,6 +63,9 @@ export class GitVerseInstallationStore {
         full_name TEXT NOT NULL UNIQUE,
         webhook_id INTEGER NOT NULL,
         webhook_secret_cipher TEXT NOT NULL,
+        hard_gate_enabled INTEGER NOT NULL DEFAULT 0,
+        hard_gate_token_cipher TEXT,
+        hard_gate_branch TEXT,
         active INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -77,6 +80,16 @@ export class GitVerseInstallationStore {
         PRIMARY KEY (repository_id, pull_number)
       );
     `);
+    const repositoryColumns = this.db.prepare("PRAGMA table_info(gitverse_repositories)").all();
+    if (!repositoryColumns.some(column => column.name === "hard_gate_enabled")) {
+      this.db.exec("ALTER TABLE gitverse_repositories ADD COLUMN hard_gate_enabled INTEGER NOT NULL DEFAULT 0;");
+    }
+    if (!repositoryColumns.some(column => column.name === "hard_gate_token_cipher")) {
+      this.db.exec("ALTER TABLE gitverse_repositories ADD COLUMN hard_gate_token_cipher TEXT;");
+    }
+    if (!repositoryColumns.some(column => column.name === "hard_gate_branch")) {
+      this.db.exec("ALTER TABLE gitverse_repositories ADD COLUMN hard_gate_branch TEXT;");
+    }
   }
 
   close() { this.db.close(); }
@@ -236,17 +249,24 @@ export class GitVerseInstallationStore {
       installationId: row.installation_id,
       fullName: row.full_name,
       webhookId: row.webhook_id,
-      webhookSecret: this.decrypt(row.webhook_secret_cipher, `repository:${id}:webhook`)
+      webhookSecret: this.decrypt(row.webhook_secret_cipher, `repository:${id}:webhook`),
+      hardGateEnabled: row.hard_gate_enabled === 1,
+      hardGateToken: row.hard_gate_token_cipher
+        ? this.decrypt(row.hard_gate_token_cipher, `repository:${id}:hard-gate`)
+        : "",
+      hardGateBranch: row.hard_gate_branch || ""
     };
   }
 
   listRepositories(installationId) {
     return this.db.prepare(
-      "SELECT repository_id, full_name, webhook_id FROM gitverse_repositories WHERE installation_id = ? AND active = 1 ORDER BY full_name"
+      "SELECT repository_id, full_name, webhook_id, hard_gate_enabled, hard_gate_branch FROM gitverse_repositories WHERE installation_id = ? AND active = 1 ORDER BY full_name"
     ).all(String(installationId)).map(row => ({
       repositoryId: row.repository_id,
       fullName: row.full_name,
-      webhookId: row.webhook_id
+      webhookId: row.webhook_id,
+      hardGateEnabled: row.hard_gate_enabled === 1,
+      hardGateBranch: row.hard_gate_branch || ""
     }));
   }
 
@@ -273,6 +293,35 @@ export class GitVerseInstallationStore {
       this.encrypt(webhookSecret, `repository:${id}:webhook`),
       now, now
     );
+    return this.getRepository(id);
+  }
+
+  setHardGate(repositoryId, { enabled, token = "", branch = "" } = {}) {
+    const id = positiveId(repositoryId, "GitVerse repository id");
+    const existing = this.getRepository(id);
+    if (!existing) throw new Error("GitVerse repository is not installed");
+    if (enabled) {
+      const gateToken = String(token || existing.hardGateToken || "");
+      if (Buffer.byteLength(gateToken) < 32) throw new Error("GitVerse hard-gate token is too short");
+      const branchName = String(branch || existing.hardGateBranch || "").trim();
+      if (!branchName) throw new Error("GitVerse hard-gate branch is required");
+      this.db.prepare(`
+        UPDATE gitverse_repositories
+        SET hard_gate_enabled = 1, hard_gate_token_cipher = ?, hard_gate_branch = ?, updated_at = ?
+        WHERE repository_id = ?
+      `).run(
+        this.encrypt(gateToken, `repository:${id}:hard-gate`),
+        branchName,
+        this.clock(),
+        id
+      );
+    } else {
+      this.db.prepare(`
+        UPDATE gitverse_repositories
+        SET hard_gate_enabled = 0, hard_gate_token_cipher = NULL, hard_gate_branch = NULL, updated_at = ?
+        WHERE repository_id = ?
+      `).run(this.clock(), id);
+    }
     return this.getRepository(id);
   }
 

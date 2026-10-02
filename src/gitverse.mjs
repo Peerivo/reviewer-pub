@@ -190,6 +190,46 @@ export class GitVerseClient {
     });
   }
 
+  async deleteFile(fullName, path, { branch, sha, message } = {}) {
+    const [owner, repo] = repoParts(fullName);
+    const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
+    if (!sha) throw new GitVerseError("file SHA is required for deletion", 400);
+    return this.request(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
+      method: "DELETE",
+      body: {
+        branch: String(branch || ""),
+        sha: String(sha),
+        message: String(message || "Remove file via Peerivo Reviewer")
+      }
+    });
+  }
+
+  async putSecret(fullName, name, value) {
+    const secretName = String(name || "").trim().toUpperCase();
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(secretName) || secretName.startsWith("GITVERSE_")) {
+      throw new GitVerseError("invalid GitVerse secret name", 400);
+    }
+    const secret = String(value || "");
+    if (!secret) throw new GitVerseError("GitVerse secret value is required", 400);
+    const [owner, repo] = repoParts(fullName);
+    return this.request(
+      `/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(secretName)}?value=${encodeURIComponent(secret)}`,
+      { method: "PUT" }
+    );
+  }
+
+  async deleteSecret(fullName, name) {
+    const secretName = String(name || "").trim().toUpperCase();
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(secretName) || secretName.startsWith("GITVERSE_")) {
+      throw new GitVerseError("invalid GitVerse secret name", 400);
+    }
+    const [owner, repo] = repoParts(fullName);
+    return this.request(
+      `/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(secretName)}`,
+      { method: "DELETE" }
+    );
+  }
+
   async fileContent(fullName, path, ref, { maxBytes }) {
     const [owner, repo] = repoParts(fullName);
     const encodedPath = String(path).split("/").map(encodeURIComponent).join("/");
