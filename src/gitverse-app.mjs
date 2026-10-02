@@ -136,10 +136,11 @@ export function resultBody(review, changedFiles = null, {
 
   // A server-side review is not the runner's exit status. Never advertise a
   // global PASS here: the CI request can fail before or after this comment.
+  // Alert colors and icons describe code review only; the CI notice stays separate.
   const body = [
     COMMENT_MARKER,
-    review.failed ? "> [!CAUTION]" : "> [!NOTE]",
-    review.failed ? "> **⛔ BLOCKED — code review**" : "> **Code review: no blocking findings**",
+    review.failed ? "> [!CAUTION]" : "> [!TIP]",
+    review.failed ? "> **⛔ BLOCKED — code review**" : "> **✅ Code review: no blocking findings**",
     "> " + summary
   ];
   const commit = String(headSha || "").toLowerCase();
@@ -163,6 +164,7 @@ export function failClosedBody({ checkUrl = "" } = {}) {
     COMMENT_MARKER,
     "> [!WARNING]",
     "> **⚠️ REVIEW FAILED CLOSED**",
+    "> Reviewer could not safely complete the code review. Do not treat this as a successful review.",
     "",
     checkLink(checkUrl)
   ].filter(Boolean).join("\n");
