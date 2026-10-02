@@ -60,7 +60,9 @@ GET /connect/gitverse
 
 OAuth access/refresh tokens and per-repository webhook Authorization credentials are encrypted at rest. Incoming events are authenticated against the exact installed repository before Reviewer re-fetches authoritative PR, patch, tree and workflow data from the GitVerse Public API.
 
-Hosted mode publishes/upserts a **Peerivo Reviewer** PR comment. The same installer can also enable **Block merge on HIGH/CRITICAL**: Reviewer creates the repository-scoped GitVerse Actions secret and installs the hard-gate workflow automatically, so customers do not copy YAML or credentials. The gate sends only PR identity to Reviewer; the server re-fetches authoritative review data and never executes repository code.
+Hosted mode publishes/upserts a **Peerivo Reviewer** PR comment. Commercial access is bound server-side to the selected GitVerse repository id: first-time installs can receive the configured trial, promo codes can activate an entitlement, and paid access is issued without placing a commercial license key in the repository. Reconnecting cannot restart an expired hosted trial.
+
+The same installer can also enable **Block merge on HIGH/CRITICAL**: Reviewer creates the repository-scoped GitVerse Actions secret and installs the hard-gate workflow automatically, so customers do not copy YAML or credentials. The gate sends only PR identity to Reviewer; the server re-fetches authoritative review data and never executes repository code.
 
 See [`docs/GITVERSE.md`](docs/GITVERSE.md).
 
