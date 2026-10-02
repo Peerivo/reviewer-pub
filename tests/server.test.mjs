@@ -84,3 +84,44 @@ test("GitLab webhook fails closed when runtime secrets are not configured", asyn
 
   assert.equal(response.status, 503);
 });
+
+
+test("GitVerse save confirmation shows a clear success state and repository link", async (t) => {
+  const gitverseSelfService = {
+    async repositorySelection() {
+      return {
+        login: "olegka85",
+        csrf: "csrf-token",
+        repositories: [
+          {
+            id: 356125,
+            name: "tesst",
+            fullName: "olegka85/tesst",
+            visibility: "private",
+            selected: true
+          }
+        ]
+      };
+    }
+  };
+
+  const server = createServer({
+    gitverseOAuthConfig: {},
+    gitverseSelfService
+  });
+  const base = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${base}/gitverse/repositories?updated=1`, {
+    headers: { cookie: "peerivo_gitverse_install=test-session" }
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /Peerivo Reviewer connected/);
+  assert.match(body, /Settings saved/);
+  assert.match(body, /olegka85\/tesst/);
+  assert.match(body, /https:\/\/gitverse\.ru\/olegka85\/tesst/);
+  assert.match(body, /Open repository/);
+  assert.match(body, /Manage repositories/);
+});
