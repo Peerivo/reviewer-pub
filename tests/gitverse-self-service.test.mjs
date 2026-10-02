@@ -62,7 +62,7 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
       return new Response(null, { status: 204 });
     }
     if (url.pathname === "/repos/peerivo/demo/actions/secrets/PEERIVO_GATE_TOKEN" && options.method === "PUT") {
-      const value = url.searchParams.get("encrypted_value");
+      const value = url.searchParams.get("value");
       assert.match(value, /^pvrci_/);
       gateSecretInstalled = true;
       return Response.json({ name: "PEERIVO_GATE_TOKEN" }, { status: 201 });
