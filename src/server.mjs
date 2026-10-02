@@ -139,7 +139,7 @@ ${updated ? '<p class="notice">GitLab installation updated.</p>' : ""}
 </form>`;
 }
 
-function repositoriesPage(selection, { updated = false } = {}) {
+function repositoriesPage(selection, { updated = false, access = "", error = "" } = {}) {
   const rows = selection.repositories.map(repository => {
     const checked = repository.selected ? " checked" : "";
     const detail = repository.visibility ? ` · ${escapeHtml(repository.visibility)}` : "";
@@ -155,13 +155,28 @@ function repositoriesPage(selection, { updated = false } = {}) {
     return `<a class="repo-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(repository.fullName)} ↗</a>`;
   }).join("");
 
+  const accessLine = access === "trial"
+    ? " Free trial activated."
+    : access === "promo"
+      ? " Promo code applied and Reviewer access activated."
+      : access === "active"
+        ? " Existing Reviewer access remains active."
+        : "";
+  const errorPanel = error === "license_required"
+    ? `<section class="billing-error" role="alert"><strong>Reviewer access required</strong><span>Your trial has ended. Activate a license or enter a promo code to continue.</span></section>`
+    : error === "promo_invalid"
+      ? `<section class="billing-error" role="alert"><strong>Promo code not accepted</strong><span>The promo code is invalid, expired, or unavailable.</span></section>`
+      : error === "checkout_required"
+        ? `<section class="billing-error" role="alert"><strong>Checkout required</strong><span>This discount promo requires a paid checkout before Reviewer can be activated.</span></section>`
+        : "";
+
   const success = updated
     ? selected.length > 0
       ? `<section class="success" role="status">
           <div class="success-mark">✓</div>
           <div>
             <h2>Peerivo Reviewer connected</h2>
-            <p>Settings saved. Reviewer is enabled for ${selected.length} ${selected.length === 1 ? "repository" : "repositories"} and will run on new or updated pull requests.${selectedGateCount ? ` Hard Merge Gate is active for ${selectedGateCount}.` : ""}</p>
+            <p>Settings saved. Reviewer is enabled for ${selected.length} ${selected.length === 1 ? "repository" : "repositories"} and will run on new or updated pull requests.${selectedGateCount ? ` Hard Merge Gate is active for ${selectedGateCount}.` : ""}${accessLine}</p>
             <div class="connected-repos">${selectedLinks}</div>
             <div class="success-actions">
               <a class="button primary" href="${escapeHtml(`https://gitverse.ru/${String(selected[0].fullName).split("/").map(encodeURIComponent).join("/")}`)}" target="_blank" rel="noopener">Open repository</a>
@@ -190,15 +205,18 @@ h1{font-size:2rem;margin-bottom:.4rem}h2{margin:.1rem 0 .35rem;font-size:1.35rem
 .success p{margin:.2rem 0 .8rem}.connected-repos{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.repo-link{padding:6px 9px;background:white;border:1px solid #bbf7d0;border-radius:8px;text-decoration:none;color:#166534;font-weight:650}
 .success-actions,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button,button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;text-decoration:none;cursor:pointer}
 .primary,button{background:#18181b;color:white}.secondary-link{background:white;color:#18181b}
+.billing-error{display:grid;gap:4px;padding:14px 16px;margin:18px 0;border:1px solid #fca5a5;background:#fef2f2;border-radius:10px}.billing-error span{color:#7f1d1d}.promo{display:grid;gap:6px;margin:0 0 18px}.promo input{font:inherit;padding:10px 12px;border:1px solid #d4d4d8;border-radius:9px;max-width:360px}.promo small{color:#71717a}
 .projects{display:grid;gap:8px;margin:24px 0}.project{display:flex;gap:12px;padding:12px;border:1px solid #e4e4e7;border-radius:10px;align-items:flex-start}
 .project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}.gate-option{display:flex;gap:10px;align-items:flex-start;padding:14px;margin:0 0 18px;border:1px solid #d4d4d8;border-radius:10px;background:#fafafa}.gate-option input{margin-top:5px}.gate-option span{display:grid}.gate-option small{color:#71717a}.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
 </style>
 <h1>Connect GitVerse</h1>
 <p>Signed in as <strong>${escapeHtml(selection.login)}</strong>. Select repositories where Peerivo Reviewer should review pull requests.</p>
+${errorPanel}
 ${success}
 <form method="post" action="/gitverse/repositories">
 <input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
 <div class="projects">${rows || "<p>No Owner/Admin repositories are available to this account.</p>"}</div>
+<label class="promo"><strong>Promo code <span style="font-weight:400;color:#71717a">(optional)</span></strong><input type="text" name="promo_code" maxlength="96" autocomplete="off" placeholder="PVR-XXXX-XXXX-XXXX"><small>Leave blank to activate the free trial automatically. No license key needs to be copied into GitVerse.</small></label>
 <label class="gate-option"><input type="checkbox" name="hard_gate_all" value="1"${hardGateAll ? " checked" : ""}><span><strong>Block merge on HIGH/CRITICAL</strong><small>Installs the Peerivo Reviewer Hard Merge Gate into every selected repository automatically. No YAML or secrets to copy.</small></span></label>
 <div class="actions"><button type="submit">Save GitVerse repositories</button></div>
 </form>
@@ -386,20 +404,41 @@ export function createServer({
         const runtime = getGitVerseSelfService({ required: true });
         const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
         const selection = await runtime.repositorySelection(sessionToken);
-        return html(res, 200, repositoriesPage(selection, { updated: url.searchParams.get("updated") === "1" }), { privateResponse: true });
+        return html(res, 200, repositoriesPage(selection, {
+          updated: url.searchParams.get("updated") === "1",
+          access: url.searchParams.get("access") || "",
+          error: url.searchParams.get("error") || ""
+        }), { privateResponse: true });
       }
 
       if (req.method === "POST" && url.pathname === "/gitverse/repositories") {
         const runtime = getGitVerseSelfService({ required: true });
         const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
         const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf8"));
-        await runtime.applyRepositories({
-          sessionToken,
-          csrf: form.get("csrf") || "",
-          repositoryIds: form.getAll("repository"),
-          hardGateRepositoryIds: form.has("hard_gate_all") ? form.getAll("repository") : []
-        });
-        return redirect(res, "/gitverse/repositories?updated=1", { status: 303 });
+        try {
+          const result = await runtime.applyRepositories({
+            sessionToken,
+            csrf: form.get("csrf") || "",
+            repositoryIds: form.getAll("repository"),
+            hardGateRepositoryIds: form.has("hard_gate_all") ? form.getAll("repository") : [],
+            promoCode: form.get("promo_code") || ""
+          });
+          const modes = new Set((result.access || []).map(item => item.mode));
+          const access = modes.has("promo") ? "promo" : modes.has("trial") ? "trial" : modes.size ? "active" : "";
+          const suffix = access ? `&access=${encodeURIComponent(access)}` : "";
+          return redirect(res, `/gitverse/repositories?updated=1${suffix}`, { status: 303 });
+        } catch (error) {
+          if (error?.code === "checkout_required") {
+            return redirect(res, "/gitverse/repositories?error=checkout_required", { status: 303 });
+          }
+          if (error?.code === "promo_invalid" || (form.get("promo_code") && [404, 409, 410].includes(error?.status))) {
+            return redirect(res, "/gitverse/repositories?error=promo_invalid", { status: 303 });
+          }
+          if (error?.status === 402 || error?.status === 403) {
+            return redirect(res, "/gitverse/repositories?error=license_required", { status: 303 });
+          }
+          throw error;
+        }
       }
 
       if (req.method === "POST" && url.pathname === "/v1/ci/gitverse/review") {
