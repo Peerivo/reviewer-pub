@@ -10,10 +10,17 @@ spec:
 "$[[ inputs.job-name ]]":
   stage: $[[ inputs.stage ]]
   image: curlimages/curl:8.12.1
+  inherit:
+    default: false
+  before_script: []
+  after_script: []
+  cache: []
+  dependencies: []
   interruptible: true
   allow_failure: false
   variables:
     GIT_STRATEGY: "none"
+    GIT_SUBMODULE_STRATEGY: "none"
   script:
     - |
       set -eu
@@ -29,6 +36,7 @@ spec:
       JSON
 
       STATUS="$(curl --silent --show-error \
+        --connect-timeout 10 --max-time 180 \
         --output /tmp/peerivo-review.txt \
         --write-out "%{http_code}" \
         --request POST \
@@ -39,7 +47,7 @@ spec:
 
       cat /tmp/peerivo-review.txt
 
-      if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ]; then
+      if [ "$STATUS" = "200" ] && [ -s /tmp/peerivo-review.txt ]; then
         exit 0
       fi
       exit 1
