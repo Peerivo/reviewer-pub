@@ -213,7 +213,7 @@ export class GitVerseClient {
     if (!secret) throw new GitVerseError("GitVerse secret value is required", 400);
     const [owner, repo] = repoParts(fullName);
     return this.request(
-      `/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(secretName)}?encrypted_value=${encodeURIComponent(secret)}`,
+      `/repos/${owner}/${repo}/actions/secrets/${encodeURIComponent(secretName)}?value=${encodeURIComponent(secret)}`,
       { method: "PUT" }
     );
   }
