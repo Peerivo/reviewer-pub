@@ -5,6 +5,9 @@ import { createGitVerseSelfService } from "../src/gitverse-self-service.mjs";
 test("GitVerse self-service connects repositories, refreshes tokens and disconnects", async () => {
   let now = Date.parse("2026-09-30T12:00:00Z");
   const calls = [];
+  let workflowInstalled = false;
+  let gateSecretInstalled = false;
+  const workflowSha = "a".repeat(40);
   const repository = {
     id: 77,
     name: "demo",
@@ -12,6 +15,7 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
     visibility: "private",
     archived: false,
     disabled: false,
+    default_branch: "master",
     permissions: { pull: true, push: true, admin: true }
   };
 
@@ -57,6 +61,40 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
     if (url.pathname === "/repos/peerivo/demo/hooks/88" && options.method === "DELETE") {
       return new Response(null, { status: 204 });
     }
+    if (url.pathname === "/repos/peerivo/demo/actions/secrets/PEERIVO_GATE_TOKEN" && options.method === "PUT") {
+      const value = url.searchParams.get("encrypted_value");
+      assert.match(value, /^pvrci_/);
+      gateSecretInstalled = true;
+      return Response.json({ name: "PEERIVO_GATE_TOKEN" }, { status: 201 });
+    }
+    if (url.pathname === "/repos/peerivo/demo/actions/secrets/PEERIVO_GATE_TOKEN" && options.method === "DELETE") {
+      assert.equal(gateSecretInstalled, true);
+      gateSecretInstalled = false;
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname === "/repos/peerivo/demo/contents/.gitverse/workflows/reviewer.yml" && (options.method || "GET") === "GET") {
+      if (!workflowInstalled) return Response.json({ message: "not found" }, { status: 404 });
+      return Response.json({
+        type: "file",
+        encoding: "base64",
+        content: Buffer.from("installed", "utf8").toString("base64"),
+        sha: workflowSha
+      });
+    }
+    if (url.pathname === "/repos/peerivo/demo/contents/.gitverse/workflows/reviewer.yml" && options.method === "PUT") {
+      const body = JSON.parse(options.body);
+      assert.equal(body.branch, "master");
+      assert.match(Buffer.from(body.content, "base64").toString("utf8"), /PEERIVO_GATE_TOKEN/);
+      workflowInstalled = true;
+      return Response.json({ content: { sha: workflowSha } });
+    }
+    if (url.pathname === "/repos/peerivo/demo/contents/.gitverse/workflows/reviewer.yml" && options.method === "DELETE") {
+      const body = JSON.parse(options.body);
+      assert.equal(body.branch, "master");
+      assert.equal(body.sha, workflowSha);
+      workflowInstalled = false;
+      return Response.json({ content: null });
+    }
 
     throw new Error(`unexpected request: ${options.method || "GET"} ${url}`);
   };
@@ -97,11 +135,24 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   const applied = await runtime.applyRepositories({
     sessionToken: completed.sessionToken,
     csrf: selection.csrf,
-    repositoryIds: ["77"]
+    repositoryIds: ["77"],
+    hardGateRepositoryIds: ["77"]
   });
   assert.deepEqual(applied.installed, ["peerivo/demo"]);
+  assert.equal(applied.hardGateCount, 1);
+  assert.equal(workflowInstalled, true);
+  assert.equal(gateSecretInstalled, true);
 
   const stored = runtime.store.getRepository(77);
+  assert.equal(stored.hardGateEnabled, true);
+  assert.equal(stored.hardGateBranch, "master");
+  assert.match(stored.hardGateToken, /^pvrci_/);
+  const ciAuth = runtime.authenticateCiGate({ fullName: "peerivo/demo", token: stored.hardGateToken });
+  assert.equal(ciAuth.repositoryId, 77);
+  assert.throws(
+    () => runtime.authenticateCiGate({ fullName: "peerivo/demo", token: "wrong" }),
+    /invalid GitVerse hard-gate token/
+  );
   assert.throws(() => runtime.authenticateRepositoryWebhook({
     repositoryId: 77,
     authorizationHeader: "Bearer wrong"
@@ -128,6 +179,8 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   });
   assert.equal(disconnected.disconnected, true);
   assert.ok(disconnected.warnings.some(item => /OAuth grant remains valid/.test(item)));
+  assert.equal(workflowInstalled, false);
+  assert.equal(gateSecretInstalled, false);
   assert.equal(runtime.store.getRepository(77), null);
 
   runtime.close();
