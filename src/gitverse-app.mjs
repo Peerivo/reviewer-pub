@@ -173,7 +173,15 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
       return connected;
     },
 
-    async handleWebhook({ deliveryId = "", payload, authContext = null, authorizationHeader = "", repositoryId = null }) {
+    async handleWebhook({
+      deliveryId = "",
+      payload,
+      authContext = null,
+      authorizationHeader = "",
+      repositoryId = null,
+      expectedHeadSha = "",
+      includeReport = false
+    }) {
       if (!shouldReviewGitVersePullRequest(payload)) return { accepted: false, reason: "action_not_used" };
       const authenticated = authContext || this.authenticateWebhook({ repositoryId, authorizationHeader });
       const pullNumber = webhookPullNumber(payload);
@@ -185,6 +193,15 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
       if (pr?.state !== "open") return { accepted: false, reason: "pull_request_not_open" };
       const headSha = String(pr?.head?.sha || "").toLowerCase();
       if (!/^[0-9a-f]{40}$/.test(headSha)) throw new Error("GitVerse returned invalid PR head SHA");
+      const expected = String(expectedHeadSha || "").toLowerCase();
+      if (expected) {
+        if (!/^[0-9a-f]{40}$/.test(expected)) {
+          throw Object.assign(new Error("invalid expected GitVerse PR head SHA"), { status: 400 });
+        }
+        if (headSha !== expected) {
+          throw Object.assign(new Error("GitVerse pull request head changed before CI review"), { status: 409 });
+        }
+      }
 
       await upsertComment(selfService, gitverse, installedRepositoryId, repo, pullNumber, pendingBody({ checkUrl }));
 
@@ -227,7 +244,14 @@ export function createGitVerseApp({ config, selfService, fetchImpl = fetch }) {
             headSha
           })
         );
-        return { accepted: true, repo, pullNumber, reviewId: review.reviewId, failed: review.failed };
+        return {
+          accepted: true,
+          repo,
+          pullNumber,
+          reviewId: review.reviewId,
+          failed: review.failed,
+          ...(includeReport ? { report: review.report } : {})
+        };
       } catch (error) {
         try { await upsertComment(selfService, gitverse, installedRepositoryId, repo, pullNumber, failClosedBody({ checkUrl })); } catch {}
         throw error;
