@@ -51,7 +51,7 @@ function execute({ http = "200", body = "Peerivo Reviewer — PASSED\n", curlExi
       env: {
         ...process.env, PATH: directory + ":" + process.env.PATH,
         TMPDIR: directory, BASH_ENV: "", ENV: "",
-        PEERIVO_GATE_URL: "https://pub.reviewer.peerivo.net/v1/ci/gitverse/review",
+        PEERIVO_GATE_URL: "https://api.reviewer.peerivo.net/v1/ci/gitverse/review",
         PEERIVO_GATE_TOKEN: missingToken ? "" : token,
         PEERIVO_REPOSITORY: "acme/widget", PEERIVO_PULL_REQUEST: "42", PEERIVO_HEAD_SHA: "a".repeat(40),
         MOCK_TRACE: trace, MOCK_HTTP: http, MOCK_BODY: body, MOCK_EXIT: String(curlExit),

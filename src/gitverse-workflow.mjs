@@ -13,7 +13,7 @@ export const GITVERSE_REVIEWER_WORKFLOW = [
   "    runs-on: ubuntu-latest",
   "",
   "    env:",
-  "      PEERIVO_GATE_URL: https://pub.reviewer.peerivo.net/v1/ci/gitverse/review",
+  "      PEERIVO_GATE_URL: https://api.reviewer.peerivo.net/v1/ci/gitverse/review",
   "      PEERIVO_GATE_TOKEN: ${{ secrets.PEERIVO_GATE_TOKEN }}",
   "      PEERIVO_REPOSITORY: ${{ github.repository }}",
   "      PEERIVO_PULL_REQUEST: ${{ github.event.pull_request.number }}",

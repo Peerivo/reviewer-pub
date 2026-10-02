@@ -95,10 +95,10 @@ The hosted integration upserts one marked **Peerivo Reviewer** comment on the pu
 The OAuth installer can provision the hard gate automatically. The installed workflow sends only the repository identity, pull-request number and expected head SHA to:
 
 ```text
-POST https://pub.reviewer.peerivo.net/v1/ci/gitverse/review
+POST https://api.reviewer.peerivo.net/v1/ci/gitverse/review
 ```
 
-The request is authenticated with the repository-scoped `PEERIVO_GATE_TOKEN`. Reviewer validates that token against the installed repository, re-fetches the pull request and all bounded review inputs through the GitVerse Public API, verifies that the PR head still matches the CI event, and then runs the private analyzer.
+The public API endpoint relays the bounded CI request to the GitVerse integration service over the service network. The request is authenticated with the repository-scoped `PEERIVO_GATE_TOKEN`. Reviewer validates that token against the installed repository, re-fetches the pull request and all bounded review inputs through the GitVerse Public API, verifies that the PR head still matches the CI event, and then runs the private analyzer.
 
 The workflow does not checkout or execute customer code.
 
