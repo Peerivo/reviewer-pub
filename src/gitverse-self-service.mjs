@@ -44,6 +44,57 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
     fetchImpl
   });
 
+  async function entitlementRequest(path, body, { serviceAuth = true } = {}) {
+    const headers = {
+      "content-type": "application/json",
+      "user-agent": "Peerivo-Reviewer-GitVerse/0.6"
+    };
+    if (serviceAuth) headers.authorization = `Bearer ${config.reviewerApiToken}`;
+    const response = await fetchImpl(`${config.reviewerApiUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      redirect: "error",
+      signal: AbortSignal.timeout(config.reviewTimeoutMs)
+    });
+    const text = await response.text();
+    let parsed;
+    try { parsed = text ? JSON.parse(text) : {}; }
+    catch { parsed = {}; }
+    if (!response.ok) {
+      const error = Object.assign(
+        new Error(String(parsed?.message || "Reviewer entitlement request failed")),
+        { status: response.status }
+      );
+      throw error;
+    }
+    return parsed;
+  }
+
+  async function ensureHostedAccess(repositoryIdValue, customer) {
+    return entitlementRequest("/v1/hosted/entitlements/ensure", {
+      platform: "gitverse",
+      gitverseRepositoryId: repositoryId(repositoryIdValue),
+      customer: String(customer || "").slice(0, 256)
+    });
+  }
+
+  async function redeemPromoAccess(code, repositoryIdValue, customer) {
+    const result = await entitlementRequest("/v1/promos/redeem", {
+      code: String(code || "").trim(),
+      platform: "gitverse",
+      gitverseRepositoryId: repositoryId(repositoryIdValue),
+      customer: String(customer || "").slice(0, 256)
+    }, { serviceAuth: false });
+    if (result?.requiresCheckout) {
+      throw Object.assign(new Error("promo code requires checkout"), { status: 402, code: "checkout_required" });
+    }
+    if (result?.redeemed !== true || !result?.entitlement?.id) {
+      throw Object.assign(new Error("promo code did not activate Reviewer access"), { status: 409, code: "promo_unavailable" });
+    }
+    return result;
+  }
+
   function requireSession(sessionToken) {
     const installation = installationStore.getSessionInstallation(sessionToken);
     if (!installation) throw Object.assign(new Error("GitVerse installation session expired"), { status: 401 });
@@ -170,7 +221,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       };
     },
 
-    async applyRepositories({ sessionToken, csrf, repositoryIds, hardGateRepositoryIds = [] }) {
+    async applyRepositories({ sessionToken, csrf, repositoryIds, hardGateRepositoryIds = [], promoCode = "" }) {
       const installation = requireSession(sessionToken);
       if (!installationStore.verifyCsrf(sessionToken, String(csrf || ""))) {
         throw Object.assign(new Error("invalid CSRF token"), { status: 403 });
@@ -201,6 +252,34 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       }
       for (const id of selectedIds) {
         if (!allowed.has(id)) throw Object.assign(new Error(`GitVerse repository ${id} is not selectable`), { status: 403 });
+      }
+
+      const normalizedPromo = String(promoCode || "").trim();
+      const access = [];
+      for (const id of selectedIds) {
+        try {
+          if (normalizedPromo) {
+            const redeemed = await redeemPromoAccess(normalizedPromo, id, fresh.login);
+            access.push({
+              repositoryId: id,
+              mode: "promo",
+              plan: redeemed.entitlement.plan || "",
+              endsAt: redeemed.entitlement.endsAt || ""
+            });
+          } else {
+            const ensured = await ensureHostedAccess(id, fresh.login);
+            access.push({
+              repositoryId: id,
+              mode: ensured.created ? "trial" : "active",
+              source: ensured.source || "",
+              plan: ensured.entitlement?.plan || "",
+              endsAt: ensured.entitlement?.endsAt || ""
+            });
+          }
+        } catch (error) {
+          if (normalizedPromo && error?.status === 404) error.code = "promo_invalid";
+          throw error;
+        }
       }
 
       const current = installationStore.listRepositories(fresh.id);
@@ -260,7 +339,8 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
         installed,
         removed,
         selectedCount: selectedIds.length,
-        hardGateCount: hardGateIds.length
+        hardGateCount: hardGateIds.length,
+        access
       };
     },
 
@@ -279,6 +359,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       }
 
       const id = repository.id;
+      const access = await ensureHostedAccess(id, fresh.login);
       const existing = installationStore.getRepository(id);
       const webhookSecret = existing?.webhookSecret || `pvrwh_${crypto.randomBytes(32).toString("base64url")}`;
       const authorizationHeader = `Bearer ${webhookSecret}`;
@@ -349,6 +430,12 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
         webhookId: saved.id,
         webhookEvents: saved.events || [],
         webhookLastResponseStatus: saved.last_response_status || "",
+        entitlement: {
+          mode: access.created ? "trial" : "active",
+          source: access.source || "",
+          plan: access.entitlement?.plan || "",
+          endsAt: access.entitlement?.endsAt || ""
+        },
         hardGate: hardGateResult,
         updatedBranches
       };
