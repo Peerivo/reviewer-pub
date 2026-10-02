@@ -24,7 +24,7 @@ test("GitVerse blob link targets the reviewed commit and file", () => {
   );
 });
 
-test("GitVerse code-review card never claims CI passed and identifies the reviewed commit", () => {
+test("GitVerse green code-review card never claims CI passed and identifies the reviewed commit", () => {
   const pass = resultBody({
     failed: false,
     findings: [],
@@ -34,12 +34,11 @@ test("GitVerse code-review card never claims CI passed and identifies the review
     headSha: "a".repeat(40)
   });
 
-  assert.match(pass, /Code review: no blocking findings/);
-  assert.match(pass, /\[!NOTE\]/);
+  assert.match(pass, /^> \[!TIP\]\n> \*\*✅ Code review: no blocking findings\*\*$/m);
   assert.match(pass, /CI status is not confirmed by this comment/);
   assert.match(pass, /failed or missing CI run must not be treated as successful/);
   assert.match(pass, /Reviewed commit: `aaaaaaaaaaaa`/);
-  assert.doesNotMatch(pass, /✅|\bPASS\b|\[!TIP\]/);
+  assert.doesNotMatch(pass, /\bPASS\b|CI passed|\[!NOTE\]|\[!CAUTION\]|\[!WARNING\]/);
   assert.match(pass, /0 findings · 2 files reviewed/);
   assert.match(pass, /Open Peerivo Reviewer check/);
   assert.doesNotMatch(pass, /FULL DETAILS/);
@@ -47,15 +46,16 @@ test("GitVerse code-review card never claims CI passed and identifies the review
   assert.doesNotMatch(pass, /<details>/);
 });
 
-test("GitVerse malformed review results fail closed instead of implying success", () => {
+test("GitVerse malformed review results are yellow warnings, never green success", () => {
   for (const review of [null, {}, { findings: [] }, { failed: "false", findings: [] }, { failed: false }]) {
     const body = resultBody(review);
-    assert.match(body, /REVIEW FAILED CLOSED/);
-    assert.doesNotMatch(body, /no blocking findings|✅|\bPASS\b/);
+    assert.match(body, /^> \[!WARNING\]\n> \*\*⚠️ REVIEW FAILED CLOSED\*\*$/m);
+    assert.match(body, /Do not treat this as a successful review/);
+    assert.doesNotMatch(body, /no blocking findings|✅|\bPASS\b|\[!TIP\]/);
   }
 });
 
-test("GitVerse BLOCKED card shows compact findings and links to full check", () => {
+test("GitVerse red BLOCKED card shows compact findings and links to full check", () => {
   const blocked = resultBody({
     failed: true,
     findings: [
@@ -86,7 +86,9 @@ test("GitVerse BLOCKED card shows compact findings and links to full check", () 
     headSha: "a".repeat(40)
   });
 
-  assert.match(blocked, /⛔ BLOCKED — code review/);
+  assert.match(blocked, /^> \[!CAUTION\]\n> \*\*⛔ BLOCKED — code review\*\*$/m);
+  assert.doesNotMatch(blocked, /✅|\[!TIP\]/);
+  assert.match(blocked, /CI status is not confirmed by this comment/);
   assert.match(blocked, /4 findings · 3 files reviewed/);
   assert.match(blocked, /HIGH · FC-001/);
   assert.match(blocked, /Findings & fixes/);
@@ -101,11 +103,30 @@ test("GitVerse BLOCKED card shows compact findings and links to full check", () 
 
 test("GitVerse pending and fail-closed cards stay minimal and keep the Checks link", () => {
   const url = "https://gitverse.ru/acme/widget/pulls/42/checks";
-  assert.match(pendingBody({ checkUrl: url }), /review in progress/i);
-  assert.match(pendingBody({ checkUrl: url }), /Open Peerivo Reviewer check/);
-  assert.doesNotMatch(pendingBody({ checkUrl: url }), /Head:/);
+  const pending = pendingBody({ checkUrl: url });
+  assert.match(pending, /\[!NOTE\]/);
+  assert.match(pending, /review in progress/i);
+  assert.match(pending, /Open Peerivo Reviewer check/);
+  assert.doesNotMatch(pending, /Head:|✅|\[!TIP\]|\bPASS\b/);
 
-  assert.match(failClosedBody({ checkUrl: url }), /REVIEW FAILED CLOSED/);
-  assert.match(failClosedBody({ checkUrl: url }), /Open Peerivo Reviewer check/);
-  assert.doesNotMatch(failClosedBody({ checkUrl: url }), /Head:/);
+  const failed = failClosedBody({ checkUrl: url });
+  assert.match(failed, /^> \[!WARNING\]\n> \*\*⚠️ REVIEW FAILED CLOSED\*\*$/m);
+  assert.match(failed, /Do not treat this as a successful review/);
+  assert.match(failed, /Open Peerivo Reviewer check/);
+  assert.doesNotMatch(failed, /Head:|✅|\[!TIP\]|\bPASS\b/);
+});
+
+test("GitVerse blocking verdict stays red even when no finding details are available", () => {
+  const blocked = resultBody({ failed: true, findings: [] }, 0);
+  assert.match(blocked, /^> \[!CAUTION\]\n> \*\*⛔ BLOCKED — code review\*\*$/m);
+  assert.doesNotMatch(blocked, /✅|\[!TIP\]|no blocking findings/);
+  assert.match(blocked, /CI status is not confirmed by this comment/);
+});
+
+test("GitVerse nonblocking findings preserve the scoped green result and accurate count", () => {
+  const body = resultBody({ failed: false, findings: [{ severity: "info", title: "Advisory" }] }, 1);
+  assert.match(body, /^> \[!TIP\]\n> \*\*✅ Code review: no blocking findings\*\*$/m);
+  assert.match(body, /1 finding · 1 file reviewed/);
+  assert.match(body, /CI status is not confirmed by this comment/);
+  assert.doesNotMatch(body, /0 findings|\bPASS\b|CI passed/);
 });
