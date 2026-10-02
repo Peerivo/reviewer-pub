@@ -61,6 +61,20 @@ When Hard Merge Gate is enabled, Reviewer additionally:
 
 The user never needs to copy YAML or secret values.
 
+### Trial, license and promo binding
+
+Commercial access is bound server-side to the exact GitVerse repository id. The repository never receives a commercial license key.
+
+On Save:
+
+- if the repository already has an active entitlement, Reviewer keeps using it;
+- if this is the first activation and no promo code is supplied, Reviewer creates the configured hosted trial;
+- if a promo code is supplied, Reviewer redeems it for the selected repository;
+- if a previous hosted trial has expired, reconnecting does not create a new trial;
+- paid access is issued as a hosted entitlement and is validated by repository id on every review.
+
+The installer therefore has one optional **Promo code** field. No license secret is copied into GitVerse. The only repository secret used by the optional Hard Merge Gate is the separate, repository-scoped `PEERIVO_GATE_TOKEN`, which authenticates the CI call but does not represent the commercial entitlement.
+
 ## Review flow
 
 A valid webhook is only a notification. Reviewer authenticates the repository-scoped webhook, then re-fetches authoritative state through the GitVerse Public API:
