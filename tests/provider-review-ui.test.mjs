@@ -24,19 +24,35 @@ test("GitVerse blob link targets the reviewed commit and file", () => {
   );
 });
 
-test("GitVerse PASS card stays compact and links to the full check", () => {
+test("GitVerse code-review card never claims CI passed and identifies the reviewed commit", () => {
   const pass = resultBody({
     failed: false,
     findings: [],
     report: "FULL DETAILS THAT MUST STAY IN CHECKS"
-  }, 2, { checkUrl: "https://gitverse.ru/acme/widget/pulls/42/checks" });
+  }, 2, {
+    checkUrl: "https://gitverse.ru/acme/widget/pulls/42/checks",
+    headSha: "a".repeat(40)
+  });
 
-  assert.match(pass, /✅ PASS/);
+  assert.match(pass, /Code review: no blocking findings/);
+  assert.match(pass, /\[!NOTE\]/);
+  assert.match(pass, /CI status is not confirmed by this comment/);
+  assert.match(pass, /failed or missing CI run must not be treated as successful/);
+  assert.match(pass, /Reviewed commit: `aaaaaaaaaaaa`/);
+  assert.doesNotMatch(pass, /✅|\bPASS\b|\[!TIP\]/);
   assert.match(pass, /0 findings · 2 files reviewed/);
   assert.match(pass, /Open Peerivo Reviewer check/);
   assert.doesNotMatch(pass, /FULL DETAILS/);
   assert.doesNotMatch(pass, /Technical details/);
   assert.doesNotMatch(pass, /<details>/);
+});
+
+test("GitVerse malformed review results fail closed instead of implying success", () => {
+  for (const review of [null, {}, { findings: [] }, { failed: "false", findings: [] }, { failed: false }]) {
+    const body = resultBody(review);
+    assert.match(body, /REVIEW FAILED CLOSED/);
+    assert.doesNotMatch(body, /no blocking findings|✅|\bPASS\b/);
+  }
 });
 
 test("GitVerse BLOCKED card shows compact findings and links to full check", () => {
@@ -70,7 +86,7 @@ test("GitVerse BLOCKED card shows compact findings and links to full check", () 
     headSha: "a".repeat(40)
   });
 
-  assert.match(blocked, /⛔ BLOCKED/);
+  assert.match(blocked, /⛔ BLOCKED — code review/);
   assert.match(blocked, /4 findings · 3 files reviewed/);
   assert.match(blocked, /HIGH · FC-001/);
   assert.match(blocked, /Findings & fixes/);
