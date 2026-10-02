@@ -127,6 +127,8 @@ test("GitVerse save confirmation shows a clear success state and repository link
   assert.match(body, /Manage repositories/);
   assert.match(body, /Block merge on HIGH\/CRITICAL/);
   assert.match(body, /Hard Merge Gate is active for 1/);
+  assert.match(body, /Promo code/);
+  assert.match(body, /free trial automatically/);
 });
 
 test("GitVerse repository save enables hard gate for every selected repository", async (t) => {
@@ -155,11 +157,84 @@ test("GitVerse repository save enables hard gate for every selected repository",
     body: new URLSearchParams({
       csrf: "csrf-token",
       repository: "356125",
-      hard_gate_all: "1"
+      hard_gate_all: "1",
+      promo_code: "GITVERSE-GIFT"
     })
   });
 
   assert.equal(response.status, 303);
   assert.deepEqual(applied.repositoryIds, ["356125"]);
   assert.deepEqual(applied.hardGateRepositoryIds, ["356125"]);
+  assert.equal(applied.promoCode, "GITVERSE-GIFT");
+});
+
+
+test("GitVerse save redirects to trial success when a trial is provisioned", async (t) => {
+  const gitverseSelfService = {
+    async applyRepositories() {
+      return {
+        selectedCount: 1,
+        hardGateCount: 0,
+        access: [{ repositoryId: 356125, mode: "trial", plan: "starter" }]
+      };
+    }
+  };
+
+  const server = createServer({
+    gitverseOAuthConfig: {},
+    gitverseSelfService
+  });
+  const base = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${base}/gitverse/repositories`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: "peerivo_gitverse_install=test-session"
+    },
+    body: new URLSearchParams({
+      csrf: "csrf-token",
+      repository: "356125"
+    })
+  });
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/gitverse/repositories?updated=1&access=trial");
+});
+
+test("GitVerse promo errors return the user to a useful installer state", async (t) => {
+  const gitverseSelfService = {
+    async applyRepositories() {
+      throw Object.assign(new Error("promo code is invalid or unavailable"), {
+        status: 404,
+        code: "promo_invalid"
+      });
+    }
+  };
+
+  const server = createServer({
+    gitverseOAuthConfig: {},
+    gitverseSelfService
+  });
+  const base = await listen(server);
+  t.after(() => server.close());
+
+  const response = await fetch(`${base}/gitverse/repositories`, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: "peerivo_gitverse_install=test-session"
+    },
+    body: new URLSearchParams({
+      csrf: "csrf-token",
+      repository: "356125",
+      promo_code: "BAD-PROMO-CODE"
+    })
+  });
+
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/gitverse/repositories?error=promo_invalid");
 });
