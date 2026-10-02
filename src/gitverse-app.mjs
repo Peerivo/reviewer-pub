@@ -124,19 +124,26 @@ export function resultBody(review, changedFiles = null, {
   repo = "",
   headSha = ""
 } = {}) {
-  const items = Array.isArray(review?.findings) ? review.findings : [];
+  if (typeof review?.failed !== "boolean" || !Array.isArray(review?.findings)) {
+    return failClosedBody({ checkUrl });
+  }
+  const items = review.findings;
   const findings = items.length;
   const files = Number.isSafeInteger(changedFiles) && changedFiles >= 0 ? changedFiles : null;
   const summary = files === null
     ? findings + " finding" + (findings === 1 ? "" : "s")
     : findings + " finding" + (findings === 1 ? "" : "s") + " · " + files + " file" + (files === 1 ? "" : "s") + " reviewed";
 
+  // A server-side review is not the runner's exit status. Never advertise a
+  // global PASS here: the CI request can fail before or after this comment.
   const body = [
     COMMENT_MARKER,
-    review.failed ? "> [!CAUTION]" : "> [!TIP]",
-    review.failed ? "> **⛔ BLOCKED**" : "> **✅ PASS**",
+    review.failed ? "> [!CAUTION]" : "> [!NOTE]",
+    review.failed ? "> **⛔ BLOCKED — code review**" : "> **Code review: no blocking findings**",
     "> " + summary
   ];
+  const commit = String(headSha || "").toLowerCase();
+  if (/^[0-9a-f]{40}$/.test(commit)) body.push("> Reviewed commit: `" + commit.slice(0, 12) + "`");
 
   if (review.failed && findings > 0) {
     body.push("", "**Findings & fixes**");
@@ -146,6 +153,7 @@ export function resultBody(review, changedFiles = null, {
     if (findings > 3) body.push("", "+" + (findings - 3) + " more in the Reviewer check.");
   }
 
+  body.push("", "**CI status is not confirmed by this comment.** The Checks result for the reviewed commit is authoritative; a failed or missing CI run must not be treated as successful.");
   if (checkUrl) body.push("", "---", checkLink(checkUrl));
   return body.join("\n");
 }
