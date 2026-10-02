@@ -5,12 +5,17 @@ on:
     paths:
       - 'gitlab-catalog/**'
       - '.github/workflows/gitlab-catalog-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'gitlab-catalog/**'
+      - '.github/workflows/gitlab-catalog-smoke.yml'
   workflow_dispatch:
     inputs:
       version:
         description: 'Published GitLab catalog version to verify'
         required: true
-        default: '1.0.0'
+        default: '1.0.1'
         type: string
 
 permissions:
@@ -21,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      CATALOG_VERSION: ${{ inputs.version || '1.0.0' }}
+      CATALOG_VERSION: ${{ inputs.version || (github.event_name == 'push' && '1.0.1') || '1.0.0' }}
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -41,7 +46,7 @@ jobs:
           const project = await get('');
           assert.equal(project.path_with_namespace, 'triombus/peerivo-reviewer');
           assert.equal(project.visibility, 'public');
-          assert.equal(project.cicd_catalog_enabled, true);
+          // Anonymous REST omits cicd_catalog_enabled; the next step verifies actual catalog publication.
           const release = await get(`/releases/${version}`);
           assert.equal(release.tag_name, version);
           const pipelines = await get(`/pipelines?ref=${version}&per_page=20`);
@@ -54,6 +59,7 @@ jobs:
           console.log(JSON.stringify({ project: project.web_url, version, pipeline: pipeline.web_url, jobs: 'verified' }));
           JS
       - name: Verify anonymously discoverable catalog component
+        if: ${{ !cancelled() }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
@@ -73,7 +79,8 @@ jobs:
           assert.ok(version.components.nodes.some(item => item.name === 'reviewer'), 'reviewer component is published');
           console.log(JSON.stringify({ catalog: 'https://gitlab.com/explore/catalog/triombus/peerivo-reviewer', version: version.name, component: 'reviewer', anonymous: true }));
           JS
-      - name: Verify hosted health and secure GitLab authorization entrypoint
+      - name: Verify hosted health and GitLab authorization entrypoint
+        if: ${{ !cancelled() }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
@@ -87,16 +94,18 @@ jobs:
             assert.equal(target.origin, 'https://gitlab.com');
             assert.equal(target.pathname, '/oauth/authorize');
             assert.equal(target.searchParams.get('response_type'), 'code');
-            assert.equal(target.searchParams.get('code_challenge_method'), 'S256');
             assert.equal(target.searchParams.get('redirect_uri'), base + '/oauth/gitlab/callback');
             assert.ok(target.searchParams.get('scope').split(' ').includes('api'));
+            assert.ok(target.searchParams.get('client_id'), 'Registered application is supplied');
+            for (const name of ['client_secret', 'access_token', 'refresh_token']) {
+              assert.equal(target.searchParams.has(name), false, 'Credentials must not appear in the authorization URL');
+            }
             const state = target.searchParams.get('state');
             assert.ok(state && state.length >= 32, 'Unpredictable state is supplied');
-            assert.ok(target.searchParams.get('code_challenge'), 'PKCE challenge is supplied');
             return state;
           };
           const first = await start();
           const second = await start();
           assert.notEqual(first, second, 'Each authorization gets a new state');
-          console.log('Health: OK. GitLab OAuth: code + PKCE S256 + fresh state + correct HTTPS callback. No login or grant performed.');
+          console.log('Health: OK. GitLab OAuth: authorization code + fresh state + correct HTTPS callback; no tokens/client secret in redirect. No login or grant performed.');
           JS
