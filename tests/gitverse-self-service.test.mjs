@@ -6,6 +6,7 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   let now = Date.parse("2026-09-30T12:00:00Z");
   const calls = [];
   let entitlementProvisioned = 0;
+  let promoRedeemed = 0;
   let workflowInstalled = false;
   let gateSecretInstalled = false;
   const workflowSha = "a".repeat(40);
@@ -44,6 +45,29 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
           endsAt: "2026-10-14T12:00:00.000Z"
         }
       }, { status: entitlementProvisioned === 1 ? 201 : 200 });
+    }
+
+    if (url.origin === "https://reviewer.example.com" && url.pathname === "/v1/promos/redeem") {
+      assert.equal(options.method, "POST");
+      assert.equal(options.headers.authorization, undefined);
+      const body = JSON.parse(options.body);
+      assert.equal(body.code, "GITVERSE-GIFT");
+      assert.equal(body.platform, "gitverse");
+      assert.equal(body.gitverseRepositoryId, 77);
+      assert.equal(body.customer, "oleg");
+      promoRedeemed += 1;
+      return Response.json({
+        schemaVersion: 1,
+        redeemed: true,
+        repeated: false,
+        entitlement: {
+          id: "promo-entitlement-77",
+          plan: "team",
+          repositoryLimit: 1,
+          startsAt: "2026-09-30T12:00:00.000Z",
+          endsAt: "2026-10-30T12:00:00.000Z"
+        }
+      });
     }
 
     if (url.origin === "https://gitverse.ru" && url.pathname === "/login/oauth/access_token") {
@@ -172,6 +196,17 @@ test("GitVerse self-service connects repositories, refreshes tokens and disconne
   assert.equal(entitlementProvisioned, 1);
   assert.equal(workflowInstalled, true);
   assert.equal(gateSecretInstalled, true);
+
+  const promoted = await runtime.applyRepositories({
+    sessionToken: completed.sessionToken,
+    csrf: selection.csrf,
+    repositoryIds: ["77"],
+    hardGateRepositoryIds: ["77"],
+    promoCode: "GITVERSE-GIFT"
+  });
+  assert.equal(promoted.access[0].mode, "promo");
+  assert.equal(promoted.access[0].plan, "team");
+  assert.equal(promoRedeemed, 1);
 
   const stored = runtime.store.getRepository(77);
   assert.equal(stored.hardGateEnabled, true);
