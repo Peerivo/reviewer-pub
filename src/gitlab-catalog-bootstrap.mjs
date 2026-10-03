@@ -48,6 +48,27 @@ async function waitForNamespace(gitlab, projectId, namespace, { attempts = 90, d
   return latest;
 }
 
+async function uploadProjectAvatar(gitlab, projectId, avatarPath) {
+  const bytes = fs.readFileSync(avatarPath);
+  if (bytes.length < 1 || bytes.length > 200 * 1024) throw new Error("GitLab catalog avatar must be between 1 byte and 200 KB");
+  const form = new FormData();
+  form.set("avatar", new Blob([bytes], { type: "image/jpeg" }), "peerivo-reviewer.jpg");
+  const response = await gitlab.fetchImpl(`${gitlab.apiBase}/projects/${projectId}`, {
+    method: "PUT",
+    headers: {
+      accept: "application/json",
+      ...gitlab.authHeaders(),
+      "user-agent": "Peerivo-Reviewer-GitLab-Catalog/1.0"
+    },
+    body: form,
+    redirect: "error"
+  });
+  if (!response.ok) throw new GitLabError(`GitLab catalog avatar upload failed (${response.status})`, response.status);
+  const body = await response.json();
+  if (!body?.avatar_url) throw new Error("GitLab did not confirm catalog avatar");
+  return body;
+}
+
 async function maybeTag(gitlab, projectId, tag) {
   try { return await gitlab.request(`/projects/${projectId}/repository/tags/${encoded(tag)}`); }
   catch (error) {
@@ -66,6 +87,7 @@ export async function bootstrapGitLabCatalog({
   projectPath = "peerivo-reviewer",
   version = "1.0.0",
   assetsRoot = new URL("../gitlab-catalog/", import.meta.url),
+  avatarPath = null,
   transferPollAttempts = 90,
   transferPollDelayMs = 1000,
   sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -184,6 +206,10 @@ export async function bootstrapGitLabCatalog({
         topics: ["security", "devsecops", "ci-cd", "code-review"]
       }
     });
+
+    if (avatarPath && !project.avatar_url) {
+      project = await uploadProjectAvatar(gitlab, project.id, avatarPath);
+    }
 
     const branch = String(project.default_branch || "main");
     const files = [
