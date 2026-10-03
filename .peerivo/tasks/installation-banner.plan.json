@@ -1,0 +1,33 @@
+{
+  "task": "installation-banner",
+  "repository": "Peerivo/reviewer-pub",
+  "pr": 46,
+  "environment": "production / reviewer-app",
+  "revision": 2,
+  "beforeSha": "e33289f197ca3262b5cc65087f618bda465e3213",
+  "request": "Preserve the visible connection banner, make GitLab as usable as GitVerse, verify the connection after save and provide next actions; deliver to the hosted site rather than only a preview.",
+  "retainedDecisions": [
+    "Banner remains visible on reload and revisit.",
+    "Save redirects to a separate result page with project and MR/PR navigation.",
+    "Green requires platform API read-back; errors and unconfirmed states never become green.",
+    "Connection state is not code-review, entitlement or CI success.",
+    "Retain selected projects, CSRF, protected cookies and GitVerse promo/hard-gate controls.",
+    "Keep GitHub/App review paths and the current OAuth callback configuration protections unchanged.",
+    "GitLab catalog Components UI is not owned by this application; direct installer entry remains available.",
+    "Describe what Peerivo Reviewer does on every installer page; show P brand monogram until the user supplies the exact logo file, without claiming that placeholder is the final logo."
+  ],
+  "scenarios": [
+    "GitLab and GitVerse save -> 303 -> read-back -> result",
+    "Plain management reload keeps banner and selected inputs",
+    "Missing or disabled webhook; lost permission; expired session; denied CSRF; provider error",
+    "Provider buttons without README navigation",
+    "OAuth cancel; protected callback cookie; reauthorization",
+    "Layout at 320,390,768,1440 pixels",
+    "Deployment of merged SHA and anonymous public HTTP smoke",
+    "RU/EN product description and P monogram are visible on every installer page."
+  ],
+  "limitations": [
+    "Automated provider fixtures are not live account authorization.",
+    "Authenticated user-session screen must not be claimed verified from anonymous smoke."
+  ]
+}

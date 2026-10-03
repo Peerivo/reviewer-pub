@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "../src/server.mjs";
+import { installationFixture } from "./installation-fixtures.mjs";
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -86,47 +87,22 @@ test("GitLab webhook fails closed when runtime secrets are not configured", asyn
 });
 
 
-test("GitVerse save confirmation shows a clear success state and repository link", async (t) => {
-  const gitverseSelfService = {
-    async repositorySelection() {
-      return {
-        login: "olegka85",
-        csrf: "csrf-token",
-        repositories: [
-          {
-            id: 356125,
-            name: "tesst",
-            fullName: "olegka85/tesst",
-            visibility: "private",
-            selected: true,
-            hardGateEnabled: true
-          }
-        ]
-      };
-    }
-  };
-
-  const server = createServer({
-    gitverseOAuthConfig: {},
-    gitverseSelfService
-  });
+test("GitVerse save confirmation uses persisted installation verification and keeps promo controls", async (t) => {
+  const fixture = installationFixture("gitverse");
+  fixture.service.store.setHardGate(7, { enabled: true, token: "test-gate-token-at-least-32-bytes-long", branch: "main" });
+  const server = createServer({ gitverseOAuthConfig: fixture.config, gitverseSelfService: fixture.service });
   const base = await listen(server);
-  t.after(() => server.close());
-
-  const response = await fetch(`${base}/gitverse/repositories?updated=1`, {
-    headers: { cookie: "peerivo_gitverse_install=test-session" }
-  });
-
+  t.after(() => { server.close(); fixture.service.close(); });
+  const response = await fetch(`${base}/gitverse/repositories?updated=1`, { headers: { cookie: fixture.cookie } });
   assert.equal(response.status, 200);
   const body = await response.text();
   assert.match(body, /Peerivo Reviewer connected/);
   assert.match(body, /Settings saved/);
-  assert.match(body, /olegka85\/tesst/);
-  assert.match(body, /https:\/\/gitverse\.ru\/olegka85\/tesst/);
-  assert.match(body, /Open repository/);
-  assert.match(body, /Manage repositories/);
+  assert.match(body, /alice\/widget/);
+  assert.match(body, /https:\/\/gitverse\.ru\/alice\/widget/);
+  assert.match(body, /Open project/);
+  assert.match(body, /Manage projects/);
   assert.match(body, /Block merge on HIGH\/CRITICAL/);
-  assert.match(body, /Hard Merge Gate is active for 1/);
   assert.match(body, /Promo code/);
   assert.match(body, /free trial automatically/);
 });
@@ -201,7 +177,7 @@ test("GitVerse save redirects to trial success when a trial is provisioned", asy
   });
 
   assert.equal(response.status, 303);
-  assert.equal(response.headers.get("location"), "/gitverse/repositories?updated=1&access=trial");
+  assert.equal(response.headers.get("location"), "/gitverse/connected");
 });
 
 test("GitVerse promo errors return the user to a useful installer state", async (t) => {

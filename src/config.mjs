@@ -35,6 +35,21 @@ function httpsUrl(env, name) {
   return normalizeHttps(required(env, name), name);
 }
 
+// Public callback/webhook bases must never inherit a development/container address.
+// URL parsing canonicalizes abbreviated, decimal and hexadecimal loopback IPv4 forms.
+// This is configuration validation, not DNS resolution or an SSRF protection boundary.
+function publicHttpsUrl(env, name) {
+  const value = httpsUrl(env, name);
+  const hostname = new URL(value).hostname.toLowerCase().replace(/\.$/, "");
+  const host = hostname.replace(/^\[|\]$/g, "");
+  const local = host === "localhost" || host.endsWith(".localhost")
+    || host === "localhost.localdomain" || host === "0.0.0.0" || host.startsWith("127.")
+    || host === "::" || host === "::1" || host.startsWith("::ffff:")
+    || host === "host.docker.internal" || host === "gateway.docker.internal";
+  if (local) throw new Error(`${name} must use a public host, not a local, loopback or container URL`);
+  return value;
+}
+
 function optionalHttpsUrl(env, name, fallback) {
   return normalizeHttps(String(env[name] || fallback).trim(), name);
 }
@@ -106,7 +121,7 @@ export function loadGitLabConfig(env = process.env) {
 }
 
 export function loadGitLabOAuthConfig(env = process.env) {
-  const publicUrl = httpsUrl(env, "GITLAB_PUBLIC_URL");
+  const publicUrl = publicHttpsUrl(env, "GITLAB_PUBLIC_URL");
   const tokenEncryptionKey = required(env, "GITLAB_TOKEN_ENCRYPTION_KEY");
   if (Buffer.byteLength(tokenEncryptionKey) < 32) {
     throw new Error("GITLAB_TOKEN_ENCRYPTION_KEY must contain at least 32 bytes");
@@ -139,7 +154,7 @@ export function loadGitLabOAuthConfigOptional(env = process.env) {
 }
 
 export function loadGitVerseOAuthConfig(env = process.env) {
-  const publicUrl = httpsUrl(env, "GITVERSE_PUBLIC_URL");
+  const publicUrl = publicHttpsUrl(env, "GITVERSE_PUBLIC_URL");
   const tokenEncryptionKey = required(env, "GITVERSE_TOKEN_ENCRYPTION_KEY");
   if (Buffer.byteLength(tokenEncryptionKey) < 32) {
     throw new Error("GITVERSE_TOKEN_ENCRYPTION_KEY must contain at least 32 bytes");
