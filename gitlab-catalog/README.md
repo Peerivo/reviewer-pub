@@ -44,16 +44,14 @@ Hosted webhook review works without customer YAML. If you also want a clickable 
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.2
+  - component: gitlab.com/peerivo/reviewer/reviewer@1.0.3
 ```
-
-The namespace will change to `gitlab.com/peerivo/peerivo-reviewer/...` after the existing catalog project is transferred into the Peerivo GitLab group.
 
 The default stage is `.pre`. Existing `workflow: rules` must allow merge-request pipelines. You can override the job name and stage:
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.2
+  - component: gitlab.com/peerivo/reviewer/reviewer@1.0.3
     inputs:
       job-name: "Peerivo security review"
       stage: "test"
@@ -69,4 +67,4 @@ GitLab's `api` OAuth scope is broad. Reviewer only configures the projects selec
 
 The optional CI job uses GitLab's ephemeral `CI_JOB_TOKEN`; no long-lived customer token is copied into CI. The hosted service re-fetches authoritative GitLab state and sends only bounded review material to the private Reviewer engine.
 
-[Connect / manage projects](https://pub.reviewer.peerivo.net/connect/gitlab) · [Integration source and docs](https://github.com/Peerivo/reviewer-pub)
+[Open CI/CD Catalog](https://gitlab.com/explore/catalog/peerivo/reviewer) · [Connect / manage projects](https://pub.reviewer.peerivo.net/connect/gitlab) · [Integration source and docs](https://github.com/Peerivo/reviewer-pub)

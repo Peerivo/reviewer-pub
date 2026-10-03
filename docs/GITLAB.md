@@ -4,7 +4,7 @@ Peerivo Reviewer supports GitLab.com and HTTPS GitLab Self-Managed instances. It
 
 ## Install from GitLab
 
-Open [Peerivo Reviewer in the GitLab CI/CD Catalog](https://gitlab.com/explore/catalog/triombus/peerivo-reviewer), then **Connect with GitLab**. Authorize the application in GitLab, select Maintainer/Owner projects on the Reviewer installation page, and save. Open or update a merge request to start a review.
+Open [Peerivo Reviewer in the GitLab CI/CD Catalog](https://gitlab.com/explore/catalog/peerivo/reviewer), then **Connect with GitLab**. Authorize the application in GitLab, select Maintainer/Owner projects on the Reviewer installation page, and save. Open or update a merge request to start a review.
 
 Customers do not register a new OAuth application or supply a personal access token. Hosted webhook installation does not require YAML. The project-selection screen is hosted by Reviewer; a catalog resource is not a built-in **Settings → Integrations** entry.
 
@@ -81,14 +81,14 @@ For a clickable job with a detailed trace, first connect the project through OAu
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.1
+  - component: gitlab.com/peerivo/reviewer/reviewer@1.0.3
 ```
 
 The default stage is `.pre`. GitLab does not start pipelines containing only `.pre`/`.post` jobs: retain a normal-stage job, or choose a normal stage already in your pipeline through `inputs.stage`. Existing `workflow: rules` must allow merge-request pipelines. A custom job name can avoid collisions:
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.1
+  - component: gitlab.com/peerivo/reviewer/reviewer@1.0.3
     inputs:
       job-name: "Peerivo security review"
       stage: "test"
@@ -130,7 +130,7 @@ Runtime variables:
 ```text
 GITLAB_CATALOG_BOOTSTRAP_ACTOR=triombus
 GITLAB_CATALOG_BOOTSTRAP_NAMESPACE=peerivo
-GITLAB_CATALOG_BOOTSTRAP_PROJECT=peerivo-reviewer
+GITLAB_CATALOG_BOOTSTRAP_PROJECT=reviewer
 ```
 
 Do not delete the existing OAuth application before a replacement group-owned application has been created, configured and tested. Project transfer and OAuth application ownership are separate operations.
@@ -143,6 +143,7 @@ After the `peerivo` group exists, set:
 ```text
 GITLAB_CATALOG_BOOTSTRAP_ACTOR=triombus
 GITLAB_CATALOG_BOOTSTRAP_NAMESPACE=peerivo
+GITLAB_CATALOG_BOOTSTRAP_PROJECT=reviewer
 GITLAB_CATALOG_TRANSFER_FROM=triombus/peerivo-reviewer
 ```
 
