@@ -1,56 +1,72 @@
 # Peerivo Reviewer for GitLab
 
-Fail-closed security review for merge requests. Hosted analysis plus an optional native GitLab CI/CD component.
+**Peerivo Reviewer** is a fail-closed security reviewer for GitLab merge requests. It checks security-sensitive changes before merge **without executing code from the merge request**.
+
+## What “fail-closed” means
+
+Reviewer never turns missing evidence into a green result. If GitLab returns an incomplete diff or repository tree, a required file cannot be read, the reviewed HEAD changes during collection, or Reviewer cannot complete authoritative analysis, the check fails instead of silently passing.
+
+**Complete evidence or no PASS.**
+
+## What it checks
+
+- **Secrets and credentials** — token/private-key patterns and production credentials added in changed code.
+- **CI/CD authority and permissions** — risky pipeline behavior, privilege expansion and unsafe supply-chain execution paths.
+- **Dependencies and lockfiles** — manifest/lockfile drift and dependency integrity.
+- **Migrations** — migration files without a controlled execution path.
+- **Runtime security boundaries** — tenant/RLS-sensitive code, webhooks, admin/control-plane paths, containers and infrastructure-relevant configuration when evidence is available.
+- **Coverage integrity** — truncated or unavailable review data becomes a failed-closed result, not a false PASS.
+
+Reviewer reads bounded authoritative repository data through GitLab APIs. It does **not** run your build, tests, dependency installers, migrations or application code.
 
 ## Connect Peerivo Reviewer
 
 ### [Connect with GitLab →](https://pub.reviewer.peerivo.net/connect/gitlab)
 
-Start in GitLab: **Search or go to → Explore → CI/CD Catalog → Peerivo Reviewer**.
+1. Authorize the existing **Peerivo Reviewer** application in GitLab.
+2. Select the projects Reviewer should protect and press **Save and verify connection**.
+3. Reviewer verifies project access and webhook configuration.
+4. Open or update a merge request. Reviewer publishes a **Peerivo Reviewer** status on the exact reviewed commit.
 
-1. Open **Connect with GitLab** on this page and authorize the existing Peerivo Reviewer application in GitLab.
-2. Select your Maintainer/Owner projects in the Reviewer installation screen and press **Save GitLab projects**.
-3. Open or update a merge request. Reviewer provisions the webhook automatically and publishes a **Peerivo Reviewer** commit status.
+You do not need to register your own OAuth application, create a personal access token, or copy Reviewer source into the repository.
 
-You do not need to register your own OAuth application, create a personal access token, or copy YAML for hosted webhook reviews. The project-selection screen is hosted by Reviewer; this is not a built-in entry in GitLab **Settings → Integrations**.
+### По-русски
 
-**По-русски:** откройте GitLab → Explore → CI/CD Catalog → Peerivo Reviewer, нажмите **Connect with GitLab**, подтвердите доступ и выберите проекты. Создавать своё OAuth-приложение или передавать токены не нужно. Выбор проектов выполняется на странице Reviewer.
+**Peerivo Reviewer** — fail-closed проверка безопасности merge request. Она ищет секреты, опасные CI/CD-права и supply-chain изменения, проблемы зависимостей/lockfile, неконтролируемые миграции и риски runtime-границ. Код merge request не запускается.
 
-## Optional: a native pipeline job
+**Fail-closed означает:** если Reviewer не смог доказать полноту проверки — например, GitLab вернул неполный diff, нужный файл недоступен или HEAD изменился во время анализа — зелёного PASS не будет.
 
-To add a clickable job with a detailed report to GitLab.com merge-request pipelines, connect the project as above, then add the catalog component to the existing `.gitlab-ci.yml`:
+Нажмите **Connect with GitLab**, выберите проекты и сохраните. После этого Reviewer автоматически проверяет новые и обновлённые merge request.
+
+## Optional native pipeline job
+
+Hosted webhook review works without customer YAML. If you also want a clickable GitLab pipeline job with the detailed console report, add the catalog component:
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.1
+  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.2
 ```
 
-The component adds **Peerivo Reviewer** in the `.pre` stage. It does not replace the rest of your pipeline. Existing `workflow: rules` must allow merge-request pipelines. If that job name is already used, choose another name:
+The namespace will change to `gitlab.com/peerivo/peerivo-reviewer/...` after the existing catalog project is transferred into the Peerivo GitLab group.
+
+The default stage is `.pre`. Existing `workflow: rules` must allow merge-request pipelines. You can override the job name and stage:
 
 ```yaml
 include:
-  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.1
+  - component: gitlab.com/triombus/peerivo-reviewer/reviewer@1.0.2
     inputs:
       job-name: "Peerivo security review"
-      stage: ".pre"
+      stage: "test"
 ```
 
-A completed passing report makes the job green. Blocking findings, authorization failures, unavailable analysis, incomplete responses and network errors fail the job. Findings are printed before the job exits so the file path and remediation remain visible in the trace.
+A completed non-empty HTTP 200 report passes the job. Blocking findings, incomplete analysis, authorization failure, service/network failure or missing report fail the job.
 
-A failed job is not by itself a project merge policy. To enforce it, enable **Settings → Merge requests → Merge checks → Pipelines must succeed**. Verify that all relevant merge requests actually receive this pipeline. The installer does not silently change that setting.
+To make a failed job block merge, enable **Settings → Merge requests → Merge checks → Pipelines must succeed** and verify the review job is present on relevant merge requests.
 
-For GitLab Self-Managed, use a component mirrored/released on that same instance and register the hosted connection for that instance; do not assume a GitLab.com component is available there automatically.
+## Access and data boundary
 
-## Access and security
+GitLab's `api` OAuth scope is broad. Reviewer only configures the projects selected in its installer, but that project selection does not narrow GitLab's OAuth grant itself. OAuth access/refresh tokens are encrypted at rest and refreshed server-side.
 
-GitLab's `api` OAuth scope is broad: it allows API access to resources available to the authorizing account. Reviewer limits its configured review targets to the projects you select, but this selection does not narrow the OAuth scope at GitLab. API write access is needed to manage project webhooks and publish statuses.
+The optional CI job uses GitLab's ephemeral `CI_JOB_TOKEN`; no long-lived customer token is copied into CI. The hosted service re-fetches authoritative GitLab state and sends only bounded review material to the private Reviewer engine.
 
-OAuth access/refresh tokens are encrypted at rest and refreshed server-side. The optional CI job uses GitLab's built-in ephemeral `CI_JOB_TOKEN`; no long-lived customer secret is copied into CI.
-
-The component disables inherited default jobs settings, setup/cleanup scripts, caches and artifact dependencies, and does not check out the repository or submodules. It sends only merge-request/job identity to Reviewer. The hosted service re-fetches bounded authoritative GitLab data and does not execute reviewed project builds, tests, dependency installers, migrations or application code.
-
-## Checks
-
-CI and supply-chain risks; secrets in changed code; dependency and lockfile integrity; migration execution paths; external runtime and public-repository security boundaries.
-
-[Open CI/CD Catalog](https://gitlab.com/explore/catalog/triombus/peerivo-reviewer) · [Connect / manage projects](https://pub.reviewer.peerivo.net/connect/gitlab) · [Integration source and documentation](https://github.com/Peerivo/reviewer-pub)
+[Connect / manage projects](https://pub.reviewer.peerivo.net/connect/gitlab) · [Integration source and docs](https://github.com/Peerivo/reviewer-pub)

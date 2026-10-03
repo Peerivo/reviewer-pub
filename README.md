@@ -2,7 +2,7 @@
 
 Public, source-transparent GitHub/GitLab/GitVerse integration shell for **Peerivo Reviewer**.
 
-Reviewer checks the security boundary of pull requests — CI authority, secrets, supply-chain references, caches, migrations and fail-open security logic — without executing the reviewed project's build, tests, install scripts or application code.
+Reviewer performs fail-closed security review of pull and merge requests. It checks CI authority/permissions, secrets, supply-chain and dependency integrity, migrations and runtime-relevant security boundaries without executing the reviewed project's build, tests, installers, migrations or application code. If authoritative coverage is incomplete, Reviewer fails the check instead of reporting a false PASS.
 
 This repository contains only provider integration layers. The proprietary detection engine is hosted separately and is not distributed to customer repositories.
 

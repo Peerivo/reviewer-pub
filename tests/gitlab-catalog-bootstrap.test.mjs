@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { bootstrapGitLabCatalog } from "../src/gitlab-catalog-bootstrap.mjs";
+import { bootstrapGitLabCatalog, GITLAB_CATALOG_DESCRIPTION } from "../src/gitlab-catalog-bootstrap.mjs";
 import { GitLabInstallationStore } from "../src/gitlab-installations.mjs";
 
 test("GitLab Catalog bootstrap creates a public catalog project, component files and semver tag", async (t) => {
@@ -48,6 +48,8 @@ test("GitLab Catalog bootstrap creates a public catalog project, component files
       const body = JSON.parse(options.body);
       assert.equal(body.visibility, "public");
       assert.equal(body.cicd_catalog_enabled, true);
+      assert.equal(body.description, GITLAB_CATALOG_DESCRIPTION);
+      assert.ok(body.topics.includes("security"));
       return Response.json({ id: 99, path_with_namespace: "triombus/peerivo-reviewer", web_url: "https://gitlab.example.com/triombus/peerivo-reviewer", default_branch: "main", cicd_catalog_enabled: true }, { status: 201 });
     }
     if (method === "PUT" && api === "/projects/99") {
@@ -70,7 +72,8 @@ test("GitLab Catalog bootstrap creates a public catalog project, component files
 
   const result = await bootstrapGitLabCatalog({
     oauthConfig: config,
-    ownerUsername: "triombus",
+    actorUsername: "triombus",
+    namespacePath: "triombus",
     assetsRoot: pathToFileURL(path.resolve("gitlab-catalog") + path.sep),
     fetchImpl
   });
