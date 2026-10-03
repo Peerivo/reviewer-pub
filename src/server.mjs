@@ -477,6 +477,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
           actorUsername: catalogActor,
           namespacePath: catalogNamespace,
           transferFromPath: String(process.env.GITLAB_CATALOG_TRANSFER_FROM || "").trim(),
+          catalogProjectId: String(process.env.GITLAB_CATALOG_PROJECT_ID || "").trim(),
           projectPath: String(process.env.GITLAB_CATALOG_BOOTSTRAP_PROJECT || "peerivo-reviewer").trim(),
           version: String(process.env.GITLAB_CATALOG_BOOTSTRAP_VERSION || "1.0.0").trim()
         }).then(result => {
