@@ -38,6 +38,16 @@ async function putFile(gitlab, projectId, branch, filePath, content, commitMessa
   return { changed: true, filePath };
 }
 
+async function waitForNamespace(gitlab, projectId, namespace, { attempts = 90, delayMs = 1000, sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  let latest = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    latest = await maybeProject(gitlab, projectId);
+    if (String(latest?.path_with_namespace || "").startsWith(`${namespace}/`)) return latest;
+    if (attempt + 1 < attempts && delayMs > 0) await sleepImpl(delayMs);
+  }
+  return latest;
+}
+
 async function maybeTag(gitlab, projectId, tag) {
   try { return await gitlab.request(`/projects/${projectId}/repository/tags/${encoded(tag)}`); }
   catch (error) {
@@ -52,9 +62,13 @@ export async function bootstrapGitLabCatalog({
   namespacePath,
   ownerUsername,
   transferFromPath = "",
+  catalogProjectId = null,
   projectPath = "peerivo-reviewer",
   version = "1.0.0",
   assetsRoot = new URL("../gitlab-catalog/", import.meta.url),
+  transferPollAttempts = 90,
+  transferPollDelayMs = 1000,
+  sleepImpl = ms => new Promise(resolve => setTimeout(resolve, ms)),
   fetchImpl = fetch
 } = {}) {
   const actor = String(actorUsername || ownerUsername || "").trim();
@@ -75,26 +89,54 @@ export async function bootstrapGitLabCatalog({
     let project = await maybeProject(gitlab, fullPath);
 
     const previousPath = String(transferFromPath || "").trim();
-    if (!project && previousPath && previousPath !== fullPath) {
-      const previous = await maybeProject(gitlab, previousPath);
-      if (previous) {
-        if (!Number.isSafeInteger(previous?.id) || previous.id < 1) throw new Error("GitLab returned invalid source catalog project id");
-        project = await gitlab.request(`/projects/${previous.id}/transfer`, {
+    const stableProjectId = Number(catalogProjectId);
+    let previous = null;
+
+    if (!project && Number.isSafeInteger(stableProjectId) && stableProjectId > 0) {
+      previous = await maybeProject(gitlab, stableProjectId);
+      if (String(previous?.path_with_namespace || "").startsWith(`${namespace}/`)) project = previous;
+    }
+    if (!project && !previous && previousPath && previousPath !== fullPath) {
+      previous = await maybeProject(gitlab, previousPath);
+    }
+
+    if (!project && previous) {
+      if (!Number.isSafeInteger(previous?.id) || previous.id < 1) throw new Error("GitLab returned invalid source catalog project id");
+      const currentPath = String(previous.path_with_namespace || "");
+      if (currentPath.startsWith(`${namespace}/`)) {
+        project = previous;
+      } else {
+        let transferError = null;
+        try {
+          await gitlab.request(`/projects/${previous.id}/transfer`, {
+            method: "PUT",
+            body: { namespace }
+          });
+        } catch (error) {
+          // GitLab.com project transfers are asynchronous. A retry may see the
+          // previous transfer still in progress; poll the stable project id
+          // before deciding the transfer failed.
+          if (!(error instanceof GitLabError) || ![400, 409].includes(error.status)) throw error;
+          transferError = error;
+        }
+        project = await waitForNamespace(gitlab, previous.id, namespace, {
+          attempts: transferPollAttempts,
+          delayMs: transferPollDelayMs,
+          sleepImpl
+        });
+        if (!String(project?.path_with_namespace || "").startsWith(`${namespace}/`)) {
+          if (transferError) throw transferError;
+          throw new Error(`GitLab catalog transfer did not complete in time: expected namespace ${namespace}`);
+        }
+      }
+
+      if (project.path_with_namespace !== fullPath) {
+        project = await gitlab.request(`/projects/${previous.id}`, {
           method: "PUT",
-          body: { namespace }
+          body: { path: projectPath, name: "Peerivo Reviewer" }
         });
         if (project?.path_with_namespace !== fullPath) {
-          const transferredPath = String(project?.path_with_namespace || "");
-          if (!transferredPath.startsWith(`${namespace}/`)) {
-            throw new Error(`GitLab catalog transfer is not complete: expected namespace ${namespace}`);
-          }
-          project = await gitlab.request(`/projects/${previous.id}`, {
-            method: "PUT",
-            body: { path: projectPath, name: "Peerivo Reviewer" }
-          });
-          if (project?.path_with_namespace !== fullPath) {
-            throw new Error(`GitLab catalog rename is not complete: expected ${fullPath}`);
-          }
+          throw new Error(`GitLab catalog rename is not complete: expected ${fullPath}`);
         }
       }
     }
