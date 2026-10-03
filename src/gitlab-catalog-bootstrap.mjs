@@ -51,6 +51,7 @@ export async function bootstrapGitLabCatalog({
   actorUsername,
   namespacePath,
   ownerUsername,
+  transferFromPath = "",
   projectPath = "peerivo-reviewer",
   version = "1.0.0",
   assetsRoot = new URL("../gitlab-catalog/", import.meta.url),
@@ -72,6 +73,21 @@ export async function bootstrapGitLabCatalog({
     const gitlab = await runtime.gitlabForInstallation(row.id);
     const fullPath = `${namespace}/${projectPath}`;
     let project = await maybeProject(gitlab, fullPath);
+
+    const previousPath = String(transferFromPath || "").trim();
+    if (!project && previousPath && previousPath !== fullPath) {
+      const previous = await maybeProject(gitlab, previousPath);
+      if (previous) {
+        if (!Number.isSafeInteger(previous?.id) || previous.id < 1) throw new Error("GitLab returned invalid source catalog project id");
+        project = await gitlab.request(`/projects/${previous.id}/transfer`, {
+          method: "PUT",
+          body: { namespace }
+        });
+        if (project?.path_with_namespace !== fullPath) {
+          throw new Error(`GitLab catalog transfer is not complete: expected ${fullPath}`);
+        }
+      }
+    }
 
     if (!project) {
       project = await gitlab.request("/projects", {
