@@ -107,26 +107,43 @@ test('direct installation page needs no README, and script is safely served same
   const f = await setup(t, 'gitlab');
   const response = await fetch(f.base + '/install?lang=ru');
   const body = await response.text();
+  assert.match(body, /Подключить GitHub/);
   assert.match(body, /Подключить GitLab/);
   assert.match(body, /Подключить GitVerse/);
+  assert.match(body, /github\.com\/apps\/peerivo-reviewer\/installations\/new/);
+  assert.match(body, /Одна лицензия активирует один репозиторий/);
   assert.match(body, /href="\/connect\/gitlab"/);
   assert.match(body, /href="\/connect\/gitverse"/);
   assert.match(response.headers.get('content-security-policy'), /script-src 'self'/);
   assert.match(response.headers.get('set-cookie'), /peerivo_ui_lang=ru;.*HttpOnly; Secure; SameSite=Lax/);
+  const logo = await fetch(f.base + '/assets/reviewer-logo.jpg');
+  assert.equal(logo.status, 200);
+  assert.match(logo.headers.get('content-type'), /image\/jpeg/);
+  assert.equal(logo.headers.get('x-content-type-options'), 'nosniff');
   const script = await fetch(f.base + '/assets/installation-ui.js');
   assert.match(script.headers.get('content-type'), /javascript/);
   assert.equal(script.headers.get('x-content-type-options'), 'nosniff');
 });
 
 for (const provider of ['gitlab', 'gitverse']) {
-  test(`${provider}: every installer view explains Reviewer and keeps the P monogram`, async t => {
+  test(`${provider}: every installer view explains Reviewer and keeps the Reviewer logo`, async t => {
     const f = await setup(t, provider);
     for (const path of ['/install', f.manage, `/${provider}/connected`]) {
       const body = await (await fetch(f.base + path, { headers: { cookie: f.cookie, 'accept-language': 'ru' } })).text();
       assert.match(body, /data-testid="product-description"/);
       assert.match(body, /Peerivo Reviewer проверяет изменения в коде на риски безопасности/);
       assert.match(body, /Код проекта не запускается/);
-      assert.match(body, /class="brand-mark" aria-hidden="true">P<\/span>/);
+      assert.match(body, /class="brand-logo" src="\/assets\/reviewer-logo\.jpg"/);
+      assert.match(body, /data-testid="license-rule"/);
     }
+  });
+}
+
+for (const provider of ['gitlab', 'gitverse']) {
+  test(`${provider}: installer offers one repository per license`, async t => {
+    const f = await setup(t, provider);
+    const body = await (await fetch(f.base + f.manage, { headers: { cookie: f.cookie, 'accept-language': 'ru' } })).text();
+    assert.match(body, new RegExp(`type="radio" name="${provider === 'gitlab' ? 'project' : 'repository'}"`));
+    assert.match(body, /Одна лицензия активирует один репозиторий/);
   });
 }
