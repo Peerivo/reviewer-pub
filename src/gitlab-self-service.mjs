@@ -116,7 +116,6 @@ export function createGitLabSelfService({ config, fetchImpl = fetch, clock = Dat
         throw Object.assign(new Error("invalid CSRF token"), { status: 403 });
       }
       const selectedIds = [...new Set((projectIds || []).map(projectId))];
-      if (selectedIds.length > 1) throw Object.assign(new Error("one Reviewer license can connect one GitLab project"), { status: 400 });
       if (selectedIds.length > config.maxInstallProjects) {
         throw Object.assign(new Error(`too many projects selected; maximum is ${config.maxInstallProjects}`), { status: 400 });
       }

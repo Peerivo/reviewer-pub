@@ -111,7 +111,7 @@ test('direct installation page needs no README, and script is safely served same
   assert.match(body, /Подключить GitLab/);
   assert.match(body, /Подключить GitVerse/);
   assert.match(body, /github\.com\/apps\/peerivo-reviewer\/installations\/new/);
-  assert.match(body, /Одна лицензия активирует один репозиторий/);
+  assert.match(body, /Reviewer работает с пополняемого баланса/);
   assert.match(body, /href="\/connect\/gitlab"/);
   assert.match(body, /href="\/connect\/gitverse"/);
   assert.match(response.headers.get('content-security-policy'), /script-src 'self'/);
@@ -139,11 +139,3 @@ for (const provider of ['gitlab', 'gitverse']) {
   });
 }
 
-for (const provider of ['gitlab', 'gitverse']) {
-  test(`${provider}: installer offers one repository per license`, async t => {
-    const f = await setup(t, provider);
-    const body = await (await fetch(f.base + f.manage, { headers: { cookie: f.cookie, 'accept-language': 'ru' } })).text();
-    assert.match(body, new RegExp(`type="radio" name="${provider === 'gitlab' ? 'project' : 'repository'}"`));
-    assert.match(body, /Одна лицензия активирует один репозиторий/);
-  });
-}

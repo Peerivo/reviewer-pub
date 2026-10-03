@@ -231,7 +231,6 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
         throw Object.assign(new Error("invalid CSRF token"), { status: 403 });
       }
       const selectedIds = [...new Set((repositoryIds || []).map(repositoryId))];
-      if (selectedIds.length > 1) throw Object.assign(new Error("one Reviewer license can connect one GitVerse repository"), { status: 400 });
       const hardGateIds = [...new Set((hardGateRepositoryIds || []).map(repositoryId))];
       const selectedSet = new Set(selectedIds);
       for (const id of hardGateIds) {
