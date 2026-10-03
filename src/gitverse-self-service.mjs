@@ -3,6 +3,7 @@ import { GitVerseClient, GitVerseError } from "./gitverse.mjs";
 import { GitVerseInstallationStore } from "./gitverse-installations.mjs";
 import { generateGitVersePkceVerifier, GitVerseOAuthClient, gitversePkceChallenge } from "./gitverse-oauth.mjs";
 import { GITVERSE_REVIEWER_WORKFLOW, GITVERSE_REVIEWER_WORKFLOW_PATH } from "./gitverse-workflow.mjs";
+import { licenseOwner, ownerKey } from "./license-owner.mjs";
 
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string" || !left || !right) return false;
@@ -43,6 +44,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
     token: accessToken,
     fetchImpl
   });
+  const ownerOf = repository => licenseOwner("gitverse", repository, config.apiBaseUrl);
 
   async function entitlementRequest(path, body, { serviceAuth = true } = {}) {
     const headers = {
@@ -71,21 +73,23 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
     return parsed;
   }
 
-  async function ensureHostedAccess(repositoryIdValue, customer) {
+  async function ensureHostedAccess(repositoryIdValue, customer, owner) {
     return entitlementRequest("/v1/hosted/entitlements/ensure", {
       platform: "gitverse",
       gitverseRepositoryId: repositoryId(repositoryIdValue),
+      owner,
       customer: String(customer || "").slice(0, 256)
     });
   }
 
-  async function redeemPromoAccess(code, repositoryIdValue, customer) {
+  async function redeemPromoAccess(code, repositoryIdValue, customer, owner) {
     const result = await entitlementRequest("/v1/promos/redeem", {
       code: String(code || "").trim(),
       platform: "gitverse",
       gitverseRepositoryId: repositoryId(repositoryIdValue),
+      owner,
       customer: String(customer || "").slice(0, 256)
-    }, { serviceAuth: false });
+    }, { serviceAuth: Boolean(owner) });
     if (result?.requiresCheckout) {
       throw Object.assign(new Error("promo code requires checkout"), { status: 402, code: "checkout_required" });
     }
@@ -252,28 +256,45 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       }
       for (const id of selectedIds) {
         if (!allowed.has(id)) throw Object.assign(new Error(`GitVerse repository ${id} is not selectable`), { status: 403 });
+        const existing = installationStore.getRepository(id);
+        if (existing && existing.installationId !== fresh.id) {
+          throw Object.assign(new Error(`GitVerse repository ${id} is already attached to another Reviewer installation`), { status: 409 });
+        }
       }
 
       const normalizedPromo = String(promoCode || "").trim();
+      const selectedOwners = new Set(selectedIds.map(id => ownerKey(ownerOf(allowed.get(id)))).filter(Boolean));
+      if (normalizedPromo && selectedOwners.size > 1) {
+        throw Object.assign(new Error("select repositories belonging to one owner when activating a promo"), { status: 400 });
+      }
+      let redeemedOwner = "";
       const access = [];
       for (const id of selectedIds) {
+        const owner = ownerOf(allowed.get(id));
         try {
-          if (normalizedPromo) {
-            const redeemed = await redeemPromoAccess(normalizedPromo, id, fresh.login);
+          if (normalizedPromo && !redeemedOwner) {
+            const redeemed = await redeemPromoAccess(normalizedPromo, id, fresh.login, owner);
+            if (redeemed.entitlement.scope === "owner") {
+              redeemedOwner = ownerKey(owner);
+              if (!redeemedOwner) throw new Error("owner entitlement returned without a verified owner");
+            }
             access.push({
               repositoryId: id,
               mode: "promo",
               plan: redeemed.entitlement.plan || "",
-              endsAt: redeemed.entitlement.endsAt || ""
+              endsAt: redeemed.entitlement.endsAt || "",
+              ...(redeemed.entitlement.perpetual === true ? { perpetual: true } : {})
             });
           } else {
-            const ensured = await ensureHostedAccess(id, fresh.login);
+            if (redeemedOwner && ownerKey(owner) !== redeemedOwner) throw new Error("repository owner differs from activated license");
+            const ensured = await ensureHostedAccess(id, fresh.login, owner);
             access.push({
               repositoryId: id,
               mode: ensured.created ? "trial" : "active",
               source: ensured.source || "",
               plan: ensured.entitlement?.plan || "",
-              endsAt: ensured.entitlement?.endsAt || ""
+              endsAt: ensured.entitlement?.endsAt || "",
+              ...(ensured.entitlement?.perpetual === true ? { perpetual: true } : {})
             });
           }
         } catch (error) {
@@ -359,7 +380,7 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
       }
 
       const id = repository.id;
-      const access = await ensureHostedAccess(id, fresh.login);
+      const access = await ensureHostedAccess(id, fresh.login, ownerOf(repository));
       const existing = installationStore.getRepository(id);
       const webhookSecret = existing?.webhookSecret || `pvrwh_${crypto.randomBytes(32).toString("base64url")}`;
       const authorizationHeader = `Bearer ${webhookSecret}`;
@@ -434,7 +455,8 @@ export function createGitVerseSelfService({ config, fetchImpl = fetch, clock = D
           mode: access.created ? "trial" : "active",
           source: access.source || "",
           plan: access.entitlement?.plan || "",
-          endsAt: access.entitlement?.endsAt || ""
+          endsAt: access.entitlement?.endsAt || "",
+          ...(access.entitlement?.perpetual === true ? { perpetual: true } : {})
         },
         hardGate: hardGateResult,
         updatedBranches
