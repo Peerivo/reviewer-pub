@@ -25,8 +25,8 @@ Every installer view includes a localized brief explanation of Peerivo Reviewer,
 The post-merge Installation Public Deploy Smoke checks the real hosted public description, direct buttons, script response and protected result/settings HTML. It does not perform user authorization or inspect private projects. Record exact commit, deployment and verified scenarios in the PR handoff; do not equate CI success with a verified live account connection.
 
 
-## Repository licensing rule
+## Billing direction
 
-The commercial default is one license activation per repository, independent of provider. A customer may use GitHub, GitLab or GitVerse, but a second repository requires a separate license/activation. Internal operator-issued owner-scoped gifts remain an explicit exception and are not the public default.
+The commercial model is a prepaid account balance, not one license key per repository. A customer may connect multiple repositories. Active repositories and billable review usage consume the account balance according to a versioned rate card. The account UI must show the current balance, current burn rate and an estimated number of days remaining, with a clear top-up action and low-balance warnings.
 
-The unified installer shows all three providers. GitHub opens the Peerivo Reviewer GitHub App installation screen; customers should select the repository for that license. GitLab and GitVerse self-service forms accept at most one selected repository per save.
+Existing entitlement/trial/promo machinery remains a compatibility and promotional path while wallet billing is introduced. It must not be described as the permanent customer pricing model.
