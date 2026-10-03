@@ -1,4 +1,7 @@
 import http from "node:http";
+import { createInstallationExperience } from "./installation-experience.mjs";
+import { errorPage, uiLanguage } from "./installation-ui.mjs";
+import { providerPaths, selectedRecords } from "./installation-status.mjs";
 import { createApp } from "./app.mjs";
 import { createGitLabApp } from "./gitlab-app.mjs";
 import { createGitLabCiBridge, formatGitLabCiConsoleResult } from "./gitlab-ci.mjs";
@@ -41,7 +44,7 @@ function html(res, status, body, { privateResponse = false, headers = {} } = {})
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": privateResponse ? "no-store" : "public, max-age=300",
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
@@ -96,135 +99,6 @@ function gitverseSessionCookie(token, maxAgeSeconds) {
 
 function clearGitVerseSessionCookie() {
   return `${GITVERSE_SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function projectsPage(selection, { updated = false } = {}) {
-  const rows = selection.projects.map(project => {
-    const checked = project.selected ? " checked" : "";
-    const detail = project.visibility ? ` · ${escapeHtml(project.visibility)}` : "";
-    return `<label class="project"><input type="checkbox" name="project" value="${project.id}"${checked}><span><strong>${escapeHtml(project.pathWithNamespace)}</strong><small>${escapeHtml(project.name)}${detail}</small></span></label>`;
-  }).join("");
-
-  return `<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Connect GitLab · Peerivo Reviewer</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:860px;margin:7vh auto;padding:0 24px;line-height:1.5;color:#18181b}
-h1{font-size:2rem;margin-bottom:.4rem}p{color:#52525b}.notice{padding:12px 14px;background:#f4f4f5;border-radius:10px}
-.projects{display:grid;gap:8px;margin:24px 0}.project{display:flex;gap:12px;padding:12px;border:1px solid #e4e4e7;border-radius:10px;align-items:flex-start}
-.project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}
-.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;background:#18181b;color:white;cursor:pointer}
-.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
-</style>
-<h1>Connect GitLab</h1>
-<p>Signed in as <strong>${escapeHtml(selection.username)}</strong>. Select projects where Peerivo Reviewer should review merge requests.</p>
-${updated ? '<p class="notice">GitLab installation updated.</p>' : ""}
-<form method="post" action="/gitlab/projects">
-<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
-<div class="projects">${rows || "<p>No Maintainer/Owner projects are available to this account.</p>"}</div>
-<div class="actions"><button type="submit">Save GitLab projects</button></div>
-</form>
-<form class="secondary" method="post" action="/gitlab/disconnect">
-<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
-<button type="submit">Disconnect GitLab</button>
-</form>`;
-}
-
-function repositoriesPage(selection, { updated = false, access = "", error = "" } = {}) {
-  const rows = selection.repositories.map(repository => {
-    const checked = repository.selected ? " checked" : "";
-    const detail = repository.visibility ? ` · ${escapeHtml(repository.visibility)}` : "";
-    const gate = repository.hardGateEnabled ? " · Hard gate enabled" : "";
-    return `<label class="project"><input type="checkbox" name="repository" value="${repository.id}"${checked}><span><strong>${escapeHtml(repository.fullName)}</strong><small>${escapeHtml(repository.name)}${detail}${gate}</small></span></label>`;
-  }).join("");
-
-  const selected = selection.repositories.filter(repository => repository.selected);
-  const selectedGateCount = selected.filter(repository => repository.hardGateEnabled).length;
-  const hardGateAll = selected.length > 0 && selectedGateCount === selected.length;
-  const selectedLinks = selected.map(repository => {
-    const href = `https://gitverse.ru/${String(repository.fullName).split("/").map(encodeURIComponent).join("/")}`;
-    return `<a class="repo-link" href="${escapeHtml(href)}" target="_blank" rel="noopener">${escapeHtml(repository.fullName)} ↗</a>`;
-  }).join("");
-
-  const accessLine = access === "trial"
-    ? " Free trial activated."
-    : access === "promo"
-      ? " Promo code applied and Reviewer access activated."
-      : access === "active"
-        ? " Existing Reviewer access remains active."
-        : "";
-  const errorPanel = error === "license_required"
-    ? `<section class="billing-error" role="alert"><strong>Reviewer access required</strong><span>Your trial has ended. Activate a license or enter a promo code to continue.</span></section>`
-    : error === "promo_invalid"
-      ? `<section class="billing-error" role="alert"><strong>Promo code not accepted</strong><span>The promo code is invalid, expired, or unavailable.</span></section>`
-      : error === "checkout_required"
-        ? `<section class="billing-error" role="alert"><strong>Checkout required</strong><span>This discount promo requires a paid checkout before Reviewer can be activated.</span></section>`
-        : "";
-
-  const success = updated
-    ? selected.length > 0
-      ? `<section class="success" role="status">
-          <div class="success-mark">✓</div>
-          <div>
-            <h2>Peerivo Reviewer connected</h2>
-            <p>Settings saved. Reviewer is enabled for ${selected.length} ${selected.length === 1 ? "repository" : "repositories"} and will run on new or updated pull requests.${selectedGateCount ? ` Hard Merge Gate is active for ${selectedGateCount}.` : ""}${accessLine}</p>
-            <div class="connected-repos">${selectedLinks}</div>
-            <div class="success-actions">
-              <a class="button primary" href="${escapeHtml(`https://gitverse.ru/${String(selected[0].fullName).split("/").map(encodeURIComponent).join("/")}`)}" target="_blank" rel="noopener">Open repository</a>
-              <a class="button secondary-link" href="/gitverse/repositories">Manage repositories</a>
-            </div>
-          </div>
-        </section>`
-      : `<section class="success neutral" role="status">
-          <div class="success-mark">✓</div>
-          <div>
-            <h2>GitVerse settings saved</h2>
-            <p>No repositories are selected. Peerivo Reviewer is not active for any GitVerse repository yet.</p>
-          </div>
-        </section>`
-    : "";
-
-  return `<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Connect GitVerse · Peerivo Reviewer</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:860px;margin:7vh auto;padding:0 24px;line-height:1.5;color:#18181b}
-h1{font-size:2rem;margin-bottom:.4rem}h2{margin:.1rem 0 .35rem;font-size:1.35rem}p{color:#52525b}
-.success{display:grid;grid-template-columns:auto 1fr;gap:14px;padding:18px 20px;margin:20px 0 28px;border:1px solid #86efac;background:#f0fdf4;border-radius:14px}
-.success.neutral{border-color:#d4d4d8;background:#fafafa}.success-mark{width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:#16a34a;color:white;font-weight:800;font-size:1.1rem}
-.success p{margin:.2rem 0 .8rem}.connected-repos{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px}.repo-link{padding:6px 9px;background:white;border:1px solid #bbf7d0;border-radius:8px;text-decoration:none;color:#166534;font-weight:650}
-.success-actions,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.button,button{font:inherit;padding:10px 16px;border-radius:9px;border:1px solid #18181b;text-decoration:none;cursor:pointer}
-.primary,button{background:#18181b;color:white}.secondary-link{background:white;color:#18181b}
-.billing-error{display:grid;gap:4px;padding:14px 16px;margin:18px 0;border:1px solid #fca5a5;background:#fef2f2;border-radius:10px}.billing-error span{color:#7f1d1d}.promo{display:grid;gap:6px;margin:0 0 18px}.promo input{font:inherit;padding:10px 12px;border:1px solid #d4d4d8;border-radius:9px;max-width:360px}.promo small{color:#71717a}
-.projects{display:grid;gap:8px;margin:24px 0}.project{display:flex;gap:12px;padding:12px;border:1px solid #e4e4e7;border-radius:10px;align-items:flex-start}
-.project input{margin-top:5px}.project span{display:grid}.project small{color:#71717a}.gate-option{display:flex;gap:10px;align-items:flex-start;padding:14px;margin:0 0 18px;border:1px solid #d4d4d8;border-radius:10px;background:#fafafa}.gate-option input{margin-top:5px}.gate-option span{display:grid}.gate-option small{color:#71717a}.secondary button{background:white;color:#18181b}.secondary{margin-top:28px}
-</style>
-<h1>Connect GitVerse</h1>
-<p>Signed in as <strong>${escapeHtml(selection.login)}</strong>. Select repositories where Peerivo Reviewer should review pull requests.</p>
-${errorPanel}
-${success}
-<form method="post" action="/gitverse/repositories">
-<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
-<div class="projects">${rows || "<p>No Owner/Admin repositories are available to this account.</p>"}</div>
-<label class="promo"><strong>Promo code <span style="font-weight:400;color:#71717a">(optional)</span></strong><input type="text" name="promo_code" maxlength="96" autocomplete="off" placeholder="PVR-XXXX-XXXX-XXXX"><small>Leave blank to activate the free trial automatically. No license key needs to be copied into GitVerse.</small></label>
-<label class="gate-option"><input type="checkbox" name="hard_gate_all" value="1"${hardGateAll ? " checked" : ""}><span><strong>Block merge on HIGH/CRITICAL</strong><small>Installs the Peerivo Reviewer Hard Merge Gate into every selected repository automatically. No YAML or secrets to copy.</small></span></label>
-<div class="actions"><button type="submit">Save GitVerse repositories</button></div>
-</form>
-<form class="secondary" method="post" action="/gitverse/disconnect">
-<input type="hidden" name="csrf" value="${escapeHtml(selection.csrf)}">
-<button type="submit">Disconnect GitVerse</button>
-</form>`;
 }
 
 function backgroundFailure(error, deliveryId) {
@@ -319,24 +193,36 @@ export function createServer({
     return gitverseApp;
   };
 
+  const installationExperience = createInstallationExperience({
+    runtimeFor(provider) {
+      const service = provider === "gitlab"
+        ? getGitLabSelfService({ required: true }) : getGitVerseSelfService({ required: true });
+      const config = provider === "gitlab" ? resolvedOAuthConfig : resolvedGitVerseOAuthConfig;
+      return { service, config };
+    },
+    html, redirect, readBody, parseCookie
+  });
+
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
+      if (await installationExperience(req, res, url)) return;
       if (req.method === "GET" && url.pathname === "/healthz") {
         return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.5.0" });
       }
-      if (req.method === "GET" && url.pathname === "/") {
-        return html(res, 200, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Peerivo Reviewer</title><style>body{font-family:system-ui,sans-serif;max-width:760px;margin:12vh auto;padding:0 24px;line-height:1.55}h1{font-size:2.4rem;margin-bottom:.3rem}p{color:#333}code{background:#f4f4f5;padding:.15rem .35rem;border-radius:.3rem}a{color:inherit;font-weight:650}</style><h1>Peerivo Reviewer</h1><p>Source-transparent integration shell for GitHub, GitLab and GitVerse pull/merge-request security review. It reads bounded repository metadata and never executes reviewed project code.</p><p><a href="/connect/gitlab">Connect GitLab</a> · <a href="/connect/gitverse">Connect GitVerse</a></p><p>Webhooks: <code>/webhooks/github</code>, <code>/webhooks/gitlab</code> and <code>/webhooks/gitverse/&lt;repository-id&gt;</code></p>`);
-      }
-
       if (req.method === "GET" && url.pathname === "/connect/gitlab") {
         const runtime = getGitLabSelfService({ required: true });
+        const existing = runtime.store.getSessionInstallation(parseCookie(req, "peerivo_gitlab_install"));
+        if (existing && url.searchParams.get("reauthorize") !== "1") {
+          const paths = providerPaths("gitlab");
+          return redirect(res, selectedRecords("gitlab", runtime, existing.id).length ? paths.connected : paths.manage, { status: 303 });
+        }
         return redirect(res, runtime.beginOAuth());
       }
 
       if (req.method === "GET" && url.pathname === "/oauth/gitlab/callback") {
         if (url.searchParams.get("error")) {
-          return html(res, 400, "<h1>GitLab authorization was not completed.</h1><p>You can return and start the connection again.</p>", { privateResponse: true });
+          return html(res, 400, errorPage("gitlab", { lang: uiLanguage(req), status: 400, cancelled: true }), { privateResponse: true });
         }
         const runtime = getGitLabSelfService({ required: true });
         const result = await runtime.completeOAuth({
@@ -344,29 +230,11 @@ export function createServer({
           state: url.searchParams.get("state") || ""
         });
         const maxAge = Math.floor((resolvedOAuthConfig?.installSessionTtlMs || 60 * 60 * 1000) / 1000);
-        return redirect(res, "/gitlab/projects", {
+        const destination = selectedRecords("gitlab", runtime, result.installationId).length ? "/gitlab/connected" : "/gitlab/projects";
+        return redirect(res, destination, {
           status: 303,
           headers: { "set-cookie": sessionCookie(result.sessionToken, maxAge) }
         });
-      }
-
-      if (req.method === "GET" && url.pathname === "/gitlab/projects") {
-        const runtime = getGitLabSelfService({ required: true });
-        const sessionToken = parseCookie(req, GITLAB_SESSION_COOKIE);
-        const selection = await runtime.projectSelection(sessionToken);
-        return html(res, 200, projectsPage(selection, { updated: url.searchParams.get("updated") === "1" }), { privateResponse: true });
-      }
-
-      if (req.method === "POST" && url.pathname === "/gitlab/projects") {
-        const runtime = getGitLabSelfService({ required: true });
-        const sessionToken = parseCookie(req, GITLAB_SESSION_COOKIE);
-        const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf8"));
-        await runtime.applyProjects({
-          sessionToken,
-          csrf: form.get("csrf") || "",
-          projectIds: form.getAll("project")
-        });
-        return redirect(res, "/gitlab/projects?updated=1", { status: 303 });
       }
 
       if (req.method === "POST" && url.pathname === "/gitlab/disconnect") {
@@ -382,12 +250,17 @@ export function createServer({
 
       if (req.method === "GET" && url.pathname === "/connect/gitverse") {
         const runtime = getGitVerseSelfService({ required: true });
+        const existing = runtime.store.getSessionInstallation(parseCookie(req, "peerivo_gitverse_install"));
+        if (existing && url.searchParams.get("reauthorize") !== "1") {
+          const paths = providerPaths("gitverse");
+          return redirect(res, selectedRecords("gitverse", runtime, existing.id).length ? paths.connected : paths.manage, { status: 303 });
+        }
         return redirect(res, runtime.beginOAuth());
       }
 
       if (req.method === "GET" && url.pathname === "/oauth/gitverse/callback") {
         if (url.searchParams.get("error")) {
-          return html(res, 400, "<h1>GitVerse authorization was not completed.</h1><p>You can return and start the connection again.</p>", { privateResponse: true });
+          return html(res, 400, errorPage("gitverse", { lang: uiLanguage(req), status: 400, cancelled: true }), { privateResponse: true });
         }
         const runtime = getGitVerseSelfService({ required: true });
         const result = await runtime.completeOAuth({
@@ -395,51 +268,11 @@ export function createServer({
           state: url.searchParams.get("state") || ""
         });
         const maxAge = Math.floor((resolvedGitVerseOAuthConfig?.installSessionTtlMs || 60 * 60 * 1000) / 1000);
-        return redirect(res, "/gitverse/repositories", {
+        const destination = selectedRecords("gitverse", runtime, result.installationId).length ? "/gitverse/connected" : "/gitverse/repositories";
+        return redirect(res, destination, {
           status: 303,
           headers: { "set-cookie": gitverseSessionCookie(result.sessionToken, maxAge) }
         });
-      }
-
-      if (req.method === "GET" && url.pathname === "/gitverse/repositories") {
-        const runtime = getGitVerseSelfService({ required: true });
-        const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
-        const selection = await runtime.repositorySelection(sessionToken);
-        return html(res, 200, repositoriesPage(selection, {
-          updated: url.searchParams.get("updated") === "1",
-          access: url.searchParams.get("access") || "",
-          error: url.searchParams.get("error") || ""
-        }), { privateResponse: true });
-      }
-
-      if (req.method === "POST" && url.pathname === "/gitverse/repositories") {
-        const runtime = getGitVerseSelfService({ required: true });
-        const sessionToken = parseCookie(req, GITVERSE_SESSION_COOKIE);
-        const form = new URLSearchParams((await readBody(req, MAX_FORM_BYTES)).toString("utf8"));
-        try {
-          const result = await runtime.applyRepositories({
-            sessionToken,
-            csrf: form.get("csrf") || "",
-            repositoryIds: form.getAll("repository"),
-            hardGateRepositoryIds: form.has("hard_gate_all") ? form.getAll("repository") : [],
-            promoCode: form.get("promo_code") || ""
-          });
-          const modes = new Set((result.access || []).map(item => item.mode));
-          const access = modes.has("promo") ? "promo" : modes.has("trial") ? "trial" : modes.size ? "active" : "";
-          const suffix = access ? `&access=${encodeURIComponent(access)}` : "";
-          return redirect(res, `/gitverse/repositories?updated=1${suffix}`, { status: 303 });
-        } catch (error) {
-          if (error?.code === "checkout_required") {
-            return redirect(res, "/gitverse/repositories?error=checkout_required", { status: 303 });
-          }
-          if (error?.code === "promo_invalid" || (form.get("promo_code") && [404, 409, 410].includes(error?.status))) {
-            return redirect(res, "/gitverse/repositories?error=promo_invalid", { status: 303 });
-          }
-          if (error?.status === 402 || error?.status === 403) {
-            return redirect(res, "/gitverse/repositories?error=license_required", { status: 303 });
-          }
-          throw error;
-        }
       }
 
       if (req.method === "POST" && url.pathname === "/v1/ci/gitverse/review") {
@@ -610,6 +443,8 @@ export function createServer({
       const status = Number.isSafeInteger(error?.status) ? error.status : 503;
       const message = status >= 500 ? "integration is not configured or request failed closed" : error.message;
       process.stderr.write(`Reviewer request failed closed (${error?.name || "Error"})\n`);
+      const browserRoute = new URL(req.url || "/", "http://localhost").pathname.match(/^\/(?:connect|oauth)\/(gitlab|gitverse)(?:\/callback)?$/);
+      if (browserRoute) return html(res, status, errorPage(browserRoute[1], { lang: uiLanguage(req), status }), { privateResponse: true });
       return json(res, status, { ok: false, error: message });
     }
   });

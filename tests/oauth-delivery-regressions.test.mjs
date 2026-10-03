@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { loadGitLabOAuthConfig, loadGitVerseOAuthConfig } from "../src/config.mjs";
 import { createServer } from "../src/server.mjs";
+import { installationFixture } from "./installation-fixtures.mjs";
 
 const providers = [
   { name: "gitlab", prefix: "GITLAB", load: loadGitLabOAuthConfig, manage: "/gitlab/projects", field: "project", apply: "applyProjects", select: "projectSelection", option: "gitlabSelfService", config: "gitlabOAuthConfig", label: "Save GitLab projects" },
@@ -15,7 +16,7 @@ function env(provider, publicUrl) {
     [`${p}_INSTALLATIONS_DB`]: ":memory:", REVIEWER_API_URL: "https://reviewer.example.test", REVIEWER_API_TOKEN: "synthetic-reviewer-token" };
 }
 async function listen(t, provider, service) {
-  const server = createServer({ [provider.config]: {}, [provider.option]: service });
+  const server = createServer({ [provider.config]: service.fixtureConfig || {}, [provider.option]: service });
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   t.after(() => new Promise(resolve => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;
@@ -60,7 +61,7 @@ for (const provider of providers) {
   });
   test(`${provider.name}: successful OAuth returns to management with a protected session cookie`, async t => {
     let received;
-    const base = await listen(t, provider, { async completeOAuth(input) { received = input; return { sessionToken: "synthetic-session" }; } });
+    const base = await listen(t, provider, { store: { listProjects() { return []; }, listRepositories() { return []; } }, async completeOAuth(input) { received = input; return { sessionToken: "synthetic-session", installationId: 1 }; } });
     const response = await fetch(`${base}/oauth/${provider.name}/callback?code=fixture-code&state=fixture-state`, { redirect: "manual" });
     assert.equal(response.status, 303);
     assert.equal(response.headers.get("location"), provider.manage);
@@ -69,35 +70,31 @@ for (const provider of providers) {
     assert.match(cookie, /HttpOnly/i); assert.match(cookie, /Secure/i); assert.match(cookie, /SameSite=Lax/i);
   });
   test(`${provider.name}: POST save, confirmation GET and fresh GET preserve selected input`, async t => {
-    let selected = false; let reads = 0;
-    const service = {
-      async [provider.apply](input) {
-        assert.equal(input.sessionToken, "synthetic-session"); assert.equal(input.csrf, "fixture-csrf");
-        assert.deepEqual(input[provider.name === "gitlab" ? "projectIds" : "repositoryIds"], ["7"]);
-        selected = true; return { selectedCount: 1, access: [] };
-      },
-      async [provider.select](session) { assert.equal(session, "synthetic-session"); reads++; return selection(provider, selected); },
-    };
-    const base = await listen(t, provider, service);
-    const cookie = `peerivo_${provider.name}_install=synthetic-session`;
-    const response = await fetch(base + provider.manage, { method: "POST", redirect: "manual", headers: { cookie }, body: new URLSearchParams({ csrf: "fixture-csrf", [provider.field]: "7" }) });
+    const f = installationFixture(provider.name, { installed: false });
+    t.after(() => f.service.close());
+    f.service.fixtureConfig = f.config;
+    const base = await listen(t, provider, f.service);
+    const response = await fetch(base + provider.manage, { method: "POST", redirect: "manual", headers: { cookie: f.cookie }, body: new URLSearchParams({ csrf: f.csrf, [provider.field]: "7" }) });
     assert.equal(response.status, 303);
     const next = response.headers.get("location");
-    assert.equal(next, `${provider.manage}?updated=1`);
-    for (const target of [next, provider.manage]) {
-      const page = await fetch(base + target, { headers: { cookie } });
+    assert.equal(next, `/${provider.name}/connected`);
+    const confirmation = await fetch(base + next, { headers: { cookie: f.cookie } });
+    assert.equal(confirmation.status, 200);
+    assert.match(await confirmation.text(), /data-state="connected"/);
+    for (const target of [provider.manage + "?updated=1", provider.manage]) {
+      const page = await fetch(base + target, { headers: { cookie: f.cookie } });
       assert.equal(page.status, 200);
       const html = await page.text();
       assert.match(html, new RegExp(`name="${provider.field}"[^>]*value="7"[^>]*checked`));
-      assert.ok(html.includes(provider.label));
+      assert.ok(html.includes("Save and verify connection"));
+      assert.match(html, /data-testid="connection-banner" data-state="connected"/);
       assert.match(page.headers.get("cache-control"), /no-store/);
     }
-    assert.equal(reads, 2);
   });
   test(`${provider.name}: provider save failure does not redirect to successful confirmation`, async t => {
     const base = await listen(t, provider, { async [provider.apply]() { throw Object.assign(new Error("fixture provider unavailable"), { status: 502 }); } });
     const response = await fetch(base + provider.manage, { method: "POST", redirect: "manual", body: new URLSearchParams({ csrf: "fixture-csrf", [provider.field]: "7" }) });
-    assert.equal(response.status, 502);
+    assert.equal(response.status, 503);
     assert.equal(response.headers.get("location"), null);
   });
   test(`${provider.name}: an expired management session is not a successful installation page`, async t => {
