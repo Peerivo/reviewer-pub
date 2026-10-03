@@ -9,10 +9,15 @@ for (let attempt = 0; attempt < 18; attempt++) {
     assert.equal(page.status, 200);
     const body = await page.text();
     for (const provider of ['gitlab', 'gitverse']) assert.ok(body.includes(`href="/connect/${provider}"`));
-    assert.ok(body.includes('Подключить GitLab') && body.includes('Подключить GitVerse'));
+    assert.ok(body.includes('Подключить GitHub') && body.includes('Подключить GitLab') && body.includes('Подключить GitVerse'));
+    assert.ok(body.includes('https://github.com/apps/peerivo-reviewer/installations/new'));
+    assert.ok(body.includes('Одна лицензия активирует один репозиторий'));
     assert.ok(body.includes('Peerivo Reviewer проверяет изменения в коде на риски безопасности'));
     assert.ok(body.includes('data-testid="product-description"'));
-    assert.ok(body.includes('class="brand-mark" aria-hidden="true">P</span>'));
+    assert.ok(body.includes('class="brand-logo" src="/assets/reviewer-logo.jpg"'));
+    const logo = await get('/assets/reviewer-logo.jpg');
+    assert.equal(logo.status, 200);
+    assert.ok(logo.headers.get('content-type').includes('image/jpeg'));
     const script = await get('/assets/installation-ui.js');
     assert.equal(script.status, 200);
     assert.ok(script.headers.get('content-type').includes('javascript'));
@@ -22,7 +27,7 @@ for (let attempt = 0; attempt < 18; attempt++) {
       assert.equal(response.headers.get('cache-control'), 'no-store');
       assert.ok((await response.text()).includes('Подключить заново'), path + ': useful reconnect action');
     }
-    console.log('PASS: direct RU provider buttons, same-origin progressive UI, and protected HTML connection/settings pages. No user authorization or live project verification performed.');
+    console.log('PASS: GitHub/GitLab/GitVerse cards, Reviewer logo, one-repository license copy, same-origin progressive UI, and protected HTML connection/settings pages. No user authorization or live project verification performed.');
     process.exit(0);
   } catch (error) {
     lastError = error;
