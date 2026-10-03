@@ -84,7 +84,17 @@ export async function bootstrapGitLabCatalog({
           body: { namespace }
         });
         if (project?.path_with_namespace !== fullPath) {
-          throw new Error(`GitLab catalog transfer is not complete: expected ${fullPath}`);
+          const transferredPath = String(project?.path_with_namespace || "");
+          if (!transferredPath.startsWith(`${namespace}/`)) {
+            throw new Error(`GitLab catalog transfer is not complete: expected namespace ${namespace}`);
+          }
+          project = await gitlab.request(`/projects/${previous.id}`, {
+            method: "PUT",
+            body: { path: projectPath, name: "Peerivo Reviewer" }
+          });
+          if (project?.path_with_namespace !== fullPath) {
+            throw new Error(`GitLab catalog rename is not complete: expected ${fullPath}`);
+          }
         }
       }
     }

@@ -40,7 +40,7 @@ GET /connect/gitlab
   -> Reviewer provisions per-project Merge Request webhooks
 ```
 
-Start from [Peerivo Reviewer in GitLab CI/CD Catalog](https://gitlab.com/explore/catalog/triombus/peerivo-reviewer) and choose **Connect with GitLab**. The existing application handles authorization; customers do not register their own OAuth app or copy tokens. Hosted webhook reviews need no YAML. The optional catalog component adds a native clickable pipeline job; this is distinct from GitLab's built-in **Settings → Integrations** list.
+Start from [Peerivo Reviewer in GitLab CI/CD Catalog](https://gitlab.com/explore/catalog/peerivo/reviewer) and choose **Connect with GitLab**. The existing application handles authorization; customers do not register their own OAuth app or copy tokens. Hosted webhook reviews need no YAML. The optional catalog component adds a native clickable pipeline job; this is distinct from GitLab's built-in **Settings → Integrations** list.
 
 OAuth access/refresh tokens are encrypted at rest, refreshed server-side, and never exposed to customer repositories. Each selected project has a separate random webhook secret. Incoming events resolve the exact `project.id` before Reviewer re-fetches authoritative MR, diff, tree and security-relevant contents through GitLab REST API v4.
 

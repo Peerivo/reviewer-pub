@@ -108,7 +108,7 @@ test("GitLab Catalog bootstrap can transfer the existing catalog project into a 
   const fetchImpl = async (input, options = {}) => {
     const url = new URL(String(input)); const method = options.method || "GET";
     const api = url.pathname.replace(/^\/api\/v4/, "");
-    if (method === "GET" && api === "/projects/peerivo%2Fpeerivo-reviewer") return Response.json({ message:"404" }, { status:404 });
+    if (method === "GET" && api === "/projects/peerivo%2Freviewer") return Response.json({ message:"404" }, { status:404 });
     if (method === "GET" && api === "/projects/triombus%2Fpeerivo-reviewer") {
       return Response.json({ id:99, path_with_namespace:"triombus/peerivo-reviewer" });
     }
@@ -116,19 +116,26 @@ test("GitLab Catalog bootstrap can transfer the existing catalog project into a 
       assert.deepEqual(JSON.parse(options.body), { namespace:"peerivo" });
       return Response.json({ id:99, path_with_namespace:"peerivo/peerivo-reviewer", web_url:"https://gitlab.example.com/peerivo/peerivo-reviewer", default_branch:"main", cicd_catalog_enabled:true });
     }
-    if (method === "PUT" && api === "/projects/99") return Response.json({ id:99, path_with_namespace:"peerivo/peerivo-reviewer", web_url:"https://gitlab.example.com/peerivo/peerivo-reviewer", default_branch:"main", cicd_catalog_enabled:true });
+    if (method === "PUT" && api === "/projects/99") {
+      const body = JSON.parse(options.body);
+      if (body.path) {
+        assert.deepEqual(body, { path:"reviewer", name:"Peerivo Reviewer" });
+        return Response.json({ id:99, path_with_namespace:"peerivo/reviewer", web_url:"https://gitlab.example.com/peerivo/reviewer", default_branch:"main", cicd_catalog_enabled:true });
+      }
+      return Response.json({ id:99, path_with_namespace:"peerivo/reviewer", web_url:"https://gitlab.example.com/peerivo/reviewer", default_branch:"main", cicd_catalog_enabled:true });
+    }
     if (method === "GET" && api.startsWith("/projects/99/repository/files/")) {
       const file = decodeURIComponent(api.split("/").pop().split("?")[0]);
       const source = fs.readFileSync(path.resolve("gitlab-catalog", file), "utf8");
       return Response.json({ content:Buffer.from(source).toString("base64"), last_commit_id:"abc" });
     }
-    if (method === "GET" && api === "/projects/99/repository/tags/1.0.2") return Response.json({ name:"1.0.2" });
+    if (method === "GET" && api === "/projects/99/repository/tags/1.0.3") return Response.json({ name:"1.0.3" });
     if (method === "GET" && api === "/projects/99/pipelines") return Response.json([]);
     throw new Error(`unexpected GitLab request: ${method} ${url}`);
   };
 
   const result = await bootstrapGitLabCatalog({ oauthConfig:config, actorUsername:"triombus", namespacePath:"peerivo",
-    transferFromPath:"triombus/peerivo-reviewer", version:"1.0.2",
+    transferFromPath:"triombus/peerivo-reviewer", projectPath:"reviewer", version:"1.0.3",
     assetsRoot:pathToFileURL(path.resolve("gitlab-catalog") + path.sep), fetchImpl });
-  assert.equal(result.projectPath, "peerivo/peerivo-reviewer");
+  assert.equal(result.projectPath, "peerivo/reviewer");
 });
