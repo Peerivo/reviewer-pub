@@ -2,6 +2,8 @@ import fs from "node:fs";
 import { GitLabError } from "./gitlab.mjs";
 import { createGitLabSelfService } from "./gitlab-self-service.mjs";
 
+export const GITLAB_CATALOG_DESCRIPTION = "Peerivo Reviewer — fail-closed security review for GitLab merge requests. Checks secrets, CI/CD permissions, supply chain, dependencies, migrations and runtime boundaries without executing MR code.";
+
 function encoded(value) { return encodeURIComponent(String(value)); }
 
 async function maybeProject(gitlab, path) {
@@ -46,25 +48,29 @@ async function maybeTag(gitlab, projectId, tag) {
 
 export async function bootstrapGitLabCatalog({
   oauthConfig,
+  actorUsername,
+  namespacePath,
   ownerUsername,
   projectPath = "peerivo-reviewer",
   version = "1.0.0",
   assetsRoot = new URL("../gitlab-catalog/", import.meta.url),
   fetchImpl = fetch
 } = {}) {
-  const owner = String(ownerUsername || "").trim();
+  const actor = String(actorUsername || ownerUsername || "").trim();
+  const namespace = String(namespacePath || ownerUsername || actor).trim();
   if (!oauthConfig) throw new Error("GitLab OAuth configuration is required");
-  if (!owner) throw new Error("GitLab catalog owner username is required");
+  if (!actor) throw new Error("GitLab catalog actor username is required");
+  if (!namespace) throw new Error("GitLab catalog namespace path is required");
 
   const runtime = createGitLabSelfService({ config: oauthConfig, fetchImpl });
   try {
     const row = runtime.store.db.prepare(
       "SELECT id FROM gitlab_installations WHERE username = ? ORDER BY updated_at DESC LIMIT 1"
-    ).get(owner);
-    if (!row) throw new Error(`No GitLab OAuth installation found for ${owner}`);
+    ).get(actor);
+    if (!row) throw new Error(`No GitLab OAuth installation found for ${actor}`);
 
     const gitlab = await runtime.gitlabForInstallation(row.id);
-    const fullPath = `${owner}/${projectPath}`;
+    const fullPath = `${namespace}/${projectPath}`;
     let project = await maybeProject(gitlab, fullPath);
 
     if (!project) {
@@ -73,12 +79,13 @@ export async function bootstrapGitLabCatalog({
         body: {
           name: "Peerivo Reviewer",
           path: projectPath,
-          description: "Fail-closed merge-request security review for GitLab. Does not execute reviewed project code.",
+          description: GITLAB_CATALOG_DESCRIPTION,
           visibility: "public",
           initialize_with_readme: true,
           default_branch: "main",
           cicd_catalog_enabled: true,
-          auto_devops_enabled: false
+          auto_devops_enabled: false,
+          topics: ["security", "devsecops", "ci-cd", "code-review"]
         }
       });
     }
@@ -88,10 +95,11 @@ export async function bootstrapGitLabCatalog({
     project = await gitlab.request(`/projects/${project.id}`, {
       method: "PUT",
       body: {
-        description: "Fail-closed merge-request security review for GitLab. Does not execute reviewed project code.",
+        description: GITLAB_CATALOG_DESCRIPTION,
         visibility: "public",
         cicd_catalog_enabled: true,
-        auto_devops_enabled: false
+        auto_devops_enabled: false,
+        topics: ["security", "devsecops", "ci-cd", "code-review"]
       }
     });
 

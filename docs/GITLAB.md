@@ -1,6 +1,6 @@
 # GitLab setup
 
-Peerivo Reviewer supports GitLab.com and HTTPS GitLab Self-Managed instances. Customers authorize the existing Reviewer application, select projects, and Reviewer provisions Merge Request webhooks automatically.
+Peerivo Reviewer supports GitLab.com and HTTPS GitLab Self-Managed instances. It performs fail-closed security review of merge requests without executing reviewed project code. It checks secrets, CI/CD authority, supply-chain/dependency integrity, migration execution paths and runtime-relevant security boundaries. Incomplete authoritative coverage fails instead of producing a false PASS. Customers authorize the existing Reviewer application, select projects, and Reviewer provisions Merge Request webhooks automatically.
 
 ## Install from GitLab
 
@@ -119,3 +119,18 @@ New customer installations should use OAuth.
 ## Security boundary
 
 Reviewer never executes reviewed project code. It reads bounded repository material and sends normalized review snapshots to the private Reviewer API. Commercial access is resolved against the selected project identity; no long-lived customer credential is placed in the CI job.
+
+
+## Catalog namespace migration
+
+The catalog OAuth **actor** and the public catalog **namespace** are separate settings. This lets the existing administrative GitLab user (for example `triombus`) manage a branded group namespace such as `peerivo` without creating a new personal GitLab account.
+
+Runtime variables:
+
+```text
+GITLAB_CATALOG_BOOTSTRAP_ACTOR=triombus
+GITLAB_CATALOG_BOOTSTRAP_NAMESPACE=peerivo
+GITLAB_CATALOG_BOOTSTRAP_PROJECT=peerivo-reviewer
+```
+
+Do not delete the existing OAuth application before a replacement group-owned application has been created, configured and tested. Project transfer and OAuth application ownership are separate operations.

@@ -469,11 +469,13 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     server.listen(serverConfig.port, serverConfig.host, () => {
       process.stdout.write(`Peerivo Reviewer integrations listening on ${serverConfig.host}:${serverConfig.port}\n`);
 
-      const catalogOwner = String(process.env.GITLAB_CATALOG_BOOTSTRAP_OWNER || "").trim();
-      if (catalogOwner && gitlabOAuthConfig) {
+      const catalogActor = String(process.env.GITLAB_CATALOG_BOOTSTRAP_ACTOR || process.env.GITLAB_CATALOG_BOOTSTRAP_OWNER || "").trim();
+      const catalogNamespace = String(process.env.GITLAB_CATALOG_BOOTSTRAP_NAMESPACE || process.env.GITLAB_CATALOG_BOOTSTRAP_OWNER || catalogActor).trim();
+      if (catalogActor && catalogNamespace && gitlabOAuthConfig) {
         bootstrapGitLabCatalog({
           oauthConfig: gitlabOAuthConfig,
-          ownerUsername: catalogOwner,
+          actorUsername: catalogActor,
+          namespacePath: catalogNamespace,
           projectPath: String(process.env.GITLAB_CATALOG_BOOTSTRAP_PROJECT || "peerivo-reviewer").trim(),
           version: String(process.env.GITLAB_CATALOG_BOOTSTRAP_VERSION || "1.0.0").trim()
         }).then(result => {
