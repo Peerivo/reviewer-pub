@@ -23,3 +23,10 @@ Every installer view includes a localized brief explanation of Peerivo Reviewer,
 `tests/installation-render-fixtures.mjs` creates synthetic HTML for offline responsive layout checks at 320/390/768/1440 pixels. These are not live user screenshots.
 
 The post-merge Installation Public Deploy Smoke checks the real hosted public description, direct buttons, script response and protected result/settings HTML. It does not perform user authorization or inspect private projects. Record exact commit, deployment and verified scenarios in the PR handoff; do not equate CI success with a verified live account connection.
+
+
+## Repository licensing rule
+
+The commercial default is one license activation per repository, independent of provider. A customer may use GitHub, GitLab or GitVerse, but a second repository requires a separate license/activation. Internal operator-issued owner-scoped gifts remain an explicit exception and are not the public default.
+
+The unified installer shows all three providers. GitHub opens the Peerivo Reviewer GitHub App installation screen; customers should select the repository for that license. GitLab and GitVerse self-service forms accept at most one selected repository per save.

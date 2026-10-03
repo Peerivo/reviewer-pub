@@ -8,6 +8,7 @@ RUN apt-get update \
 
 COPY --chown=node:node package.json ./
 COPY --chown=node:node src ./src
+COPY --chown=node:node assets ./assets
 COPY --chown=node:node gitlab-catalog ./gitlab-catalog
 COPY docker-entrypoint.sh /usr/local/bin/peerivo-entrypoint
 

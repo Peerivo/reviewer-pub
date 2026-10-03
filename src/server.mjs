@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import http from "node:http";
 import { createInstallationExperience } from "./installation-experience.mjs";
 import { errorPage, uiLanguage } from "./installation-ui.mjs";
@@ -16,6 +17,7 @@ const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
 const MAX_FORM_BYTES = 256 * 1024;
 const GITLAB_SESSION_COOKIE = "peerivo_gitlab_install";
 const GITVERSE_SESSION_COOKIE = "peerivo_gitverse_install";
+const REVIEWER_LOGO = fs.readFileSync(new URL("../assets/reviewer-logo.jpg", import.meta.url));
 
 function json(res, status, body) {
   const raw = JSON.stringify(body);
@@ -44,7 +46,7 @@ function html(res, status, body, { privateResponse = false, headers = {} } = {})
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": privateResponse ? "no-store" : "public, max-age=300",
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
@@ -206,6 +208,11 @@ export function createServer({
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || "/", "http://localhost");
+      if (req.method === "GET" && url.pathname === "/assets/reviewer-logo.jpg") {
+        res.writeHead(200, { "content-type": "image/jpeg", "content-length": REVIEWER_LOGO.length, "cache-control": "public, max-age=86400, immutable", "x-content-type-options": "nosniff" });
+        res.end(REVIEWER_LOGO);
+        return;
+      }
       if (await installationExperience(req, res, url)) return;
       if (req.method === "GET" && url.pathname === "/healthz") {
         return json(res, 200, { ok: true, service: "peerivo-reviewer-integrations", version: "0.5.0" });
