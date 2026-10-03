@@ -87,3 +87,48 @@ test("GitLab Catalog bootstrap creates a public catalog project, component files
   assert.match(component.body.content, /Peerivo Reviewer/);
   assert.match(component.body.content, /v1\/ci\/gitlab\/review/);
 });
+
+
+test("GitLab Catalog bootstrap can transfer the existing catalog project into a branded group namespace", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reviewer-gitlab-catalog-transfer-"));
+  const db = path.join(dir, "installations.sqlite");
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const config = {
+    gitlabBaseUrl: "https://gitlab.example.com", oauthClientId: "client", oauthClientSecret: "secret",
+    oauthRedirectUri: "https://reviewer.example.com/oauth/gitlab/callback",
+    webhookUrl: "https://reviewer.example.com/webhooks/gitlab", installationsDb: db,
+    tokenEncryptionKey: "catalog-test-encryption-key-at-least-32-bytes",
+    oauthStateTtlMs: 600000, installSessionTtlMs: 3600000, maxDiscoverProjects: 100, maxInstallProjects: 10
+  };
+  const store = new GitLabInstallationStore({ filename: db, encryptionKey: config.tokenEncryptionKey });
+  store.upsertInstallation({ baseUrl: config.gitlabBaseUrl, userId: 42, username: "triombus",
+    accessToken: "access-token", refreshToken: "refresh-token", tokenExpiresAt: Date.now() + 3600000 });
+  store.close();
+
+  const fetchImpl = async (input, options = {}) => {
+    const url = new URL(String(input)); const method = options.method || "GET";
+    const api = url.pathname.replace(/^\/api\/v4/, "");
+    if (method === "GET" && api === "/projects/peerivo%2Fpeerivo-reviewer") return Response.json({ message:"404" }, { status:404 });
+    if (method === "GET" && api === "/projects/triombus%2Fpeerivo-reviewer") {
+      return Response.json({ id:99, path_with_namespace:"triombus/peerivo-reviewer" });
+    }
+    if (method === "PUT" && api === "/projects/99/transfer") {
+      assert.deepEqual(JSON.parse(options.body), { namespace:"peerivo" });
+      return Response.json({ id:99, path_with_namespace:"peerivo/peerivo-reviewer", web_url:"https://gitlab.example.com/peerivo/peerivo-reviewer", default_branch:"main", cicd_catalog_enabled:true });
+    }
+    if (method === "PUT" && api === "/projects/99") return Response.json({ id:99, path_with_namespace:"peerivo/peerivo-reviewer", web_url:"https://gitlab.example.com/peerivo/peerivo-reviewer", default_branch:"main", cicd_catalog_enabled:true });
+    if (method === "GET" && api.startsWith("/projects/99/repository/files/")) {
+      const file = decodeURIComponent(api.split("/").pop().split("?")[0]);
+      const source = fs.readFileSync(path.resolve("gitlab-catalog", file), "utf8");
+      return Response.json({ content:Buffer.from(source).toString("base64"), last_commit_id:"abc" });
+    }
+    if (method === "GET" && api === "/projects/99/repository/tags/1.0.2") return Response.json({ name:"1.0.2" });
+    if (method === "GET" && api === "/projects/99/pipelines") return Response.json([]);
+    throw new Error(`unexpected GitLab request: ${method} ${url}`);
+  };
+
+  const result = await bootstrapGitLabCatalog({ oauthConfig:config, actorUsername:"triombus", namespacePath:"peerivo",
+    transferFromPath:"triombus/peerivo-reviewer", version:"1.0.2",
+    assetsRoot:pathToFileURL(path.resolve("gitlab-catalog") + path.sep), fetchImpl });
+  assert.equal(result.projectPath, "peerivo/peerivo-reviewer");
+});

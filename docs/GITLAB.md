@@ -134,3 +134,16 @@ GITLAB_CATALOG_BOOTSTRAP_PROJECT=peerivo-reviewer
 ```
 
 Do not delete the existing OAuth application before a replacement group-owned application has been created, configured and tested. Project transfer and OAuth application ownership are separate operations.
+
+
+### One-time move from the personal namespace
+
+After the `peerivo` group exists, set:
+
+```text
+GITLAB_CATALOG_BOOTSTRAP_ACTOR=triombus
+GITLAB_CATALOG_BOOTSTRAP_NAMESPACE=peerivo
+GITLAB_CATALOG_TRANSFER_FROM=triombus/peerivo-reviewer
+```
+
+On the next controlled deploy, bootstrap transfers the existing project instead of creating a second catalog project. The transfer preserves project history and GitLab redirects the old project URL to the new namespace. Clear `GITLAB_CATALOG_TRANSFER_FROM` after the transfer is verified.
