@@ -141,6 +141,20 @@ export async function bootstrapGitLabCatalog({
       }
     }
 
+    if (project && project.path_with_namespace !== fullPath) {
+      const currentPath = String(project.path_with_namespace || "");
+      if (!currentPath.startsWith(`${namespace}/`)) {
+        throw new Error(`GitLab catalog resolved outside expected namespace: ${currentPath || "unknown"}`);
+      }
+      project = await gitlab.request(`/projects/${project.id}`, {
+        method: "PUT",
+        body: { path: projectPath, name: "Peerivo Reviewer" }
+      });
+      if (project?.path_with_namespace !== fullPath) {
+        throw new Error(`GitLab catalog rename is not complete: expected ${fullPath}`);
+      }
+    }
+
     if (!project) {
       project = await gitlab.request("/projects", {
         method: "POST",
