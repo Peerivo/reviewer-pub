@@ -235,3 +235,53 @@ test("GitLab Catalog bootstrap enforces canonical target path even when GitLab r
     assetsRoot:pathToFileURL(path.resolve("gitlab-catalog")+path.sep),fetchImpl});
   assert.equal(result.projectPath,"peerivo/reviewer");
 });
+
+test("GitLab Catalog bootstrap uploads the Reviewer avatar when the project has none", async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reviewer-gitlab-catalog-avatar-"));
+  const db = path.join(dir, "installations.sqlite");
+  const avatar = path.join(dir, "reviewer.jpg");
+  fs.writeFileSync(avatar, Buffer.from([0xff,0xd8,0xff,0xd9]));
+  t.after(() => fs.rmSync(dir, { recursive:true, force:true }));
+  const config = {
+    gitlabBaseUrl:"https://gitlab.example.com", oauthClientId:"client", oauthClientSecret:"secret",
+    oauthRedirectUri:"https://reviewer.example.com/oauth/gitlab/callback",
+    webhookUrl:"https://reviewer.example.com/webhooks/gitlab", installationsDb:db,
+    tokenEncryptionKey:"catalog-test-encryption-key-at-least-32-bytes",
+    oauthStateTtlMs:600000, installSessionTtlMs:3600000, maxDiscoverProjects:100, maxInstallProjects:10
+  };
+  const store = new GitLabInstallationStore({ filename:db, encryptionKey:config.tokenEncryptionKey });
+  store.upsertInstallation({ baseUrl:config.gitlabBaseUrl, userId:42, username:"triombus",
+    accessToken:"access-token", refreshToken:"refresh-token", tokenExpiresAt:Date.now()+3600000 });
+  store.close();
+  let avatarUploads = 0;
+  const fetchImpl = async (input, options={}) => {
+    const url=new URL(String(input)); const method=options.method || "GET";
+    const api=url.pathname.replace(/^\/api\/v4/,"");
+    if (method==="GET" && api==="/projects/peerivo%2Freviewer") {
+      return Response.json({id:99,path_with_namespace:"peerivo/reviewer",web_url:"https://gitlab.example.com/peerivo/reviewer",default_branch:"main",cicd_catalog_enabled:true,avatar_url:null});
+    }
+    if (method==="PUT" && api==="/projects/99" && options.body instanceof FormData) {
+      avatarUploads += 1;
+      const file=options.body.get("avatar");
+      assert.equal(file.name,"peerivo-reviewer.jpg");
+      assert.equal(file.type,"image/jpeg");
+      return Response.json({id:99,path_with_namespace:"peerivo/reviewer",web_url:"https://gitlab.example.com/peerivo/reviewer",default_branch:"main",cicd_catalog_enabled:true,avatar_url:"https://gitlab.example.com/uploads/reviewer.jpg"});
+    }
+    if (method==="PUT" && api==="/projects/99") {
+      return Response.json({id:99,path_with_namespace:"peerivo/reviewer",web_url:"https://gitlab.example.com/peerivo/reviewer",default_branch:"main",cicd_catalog_enabled:true,avatar_url:null});
+    }
+    if (method==="GET" && api.startsWith("/projects/99/repository/files/")) {
+      const file=decodeURIComponent(api.split("/").pop().split("?")[0]);
+      const source=fs.readFileSync(path.resolve("gitlab-catalog",file),"utf8");
+      return Response.json({content:Buffer.from(source).toString("base64"),last_commit_id:"abc"});
+    }
+    if (method==="GET" && api==="/projects/99/repository/tags/1.0.3") return Response.json({name:"1.0.3"});
+    if (method==="GET" && api==="/projects/99/pipelines") return Response.json([]);
+    throw new Error(`unexpected GitLab request: ${method} ${url}`);
+  };
+  const result=await bootstrapGitLabCatalog({oauthConfig:config,actorUsername:"triombus",namespacePath:"peerivo",
+    catalogProjectId:99,projectPath:"reviewer",version:"1.0.3",avatarPath:avatar,
+    assetsRoot:pathToFileURL(path.resolve("gitlab-catalog")+path.sep),fetchImpl});
+  assert.equal(result.projectPath,"peerivo/reviewer");
+  assert.equal(avatarUploads,1);
+});
