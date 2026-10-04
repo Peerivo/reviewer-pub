@@ -11,6 +11,11 @@ function isSaasSecurityRelevantPath(path) {
     || /\.(?:sql|ya?ml|json|js|mjs|cjs|ts|tsx|jsx|py|php|go|cs|java|rb)$/i.test(path);
 }
 
+
+function isOssScannerSupportPath(path) {
+  return /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|requirements(?:-[^/]*)?\.txt|poetry\.lock|Pipfile(?:\.lock)?|pyproject\.toml|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|pom\.xml|build\.gradle(?:\.kts)?|gradle\.lockfile|composer\.json|composer\.lock|Gemfile(?:\.lock)?|packages\.lock\.json|[^/]+\.(?:csproj|fsproj))$/i.test(path || "");
+}
+
 function fullSha(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{40}$/i.test(value)) throw new Error(`${label} is not a full commit SHA`);
   return value.toLowerCase();
@@ -70,6 +75,7 @@ export async function collectReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
@@ -178,6 +184,7 @@ export async function collectGitLabReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
@@ -286,6 +293,7 @@ export async function collectGitVerseReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => item.status !== "removed" && isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
