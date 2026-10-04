@@ -18,7 +18,7 @@ function mockGithub({ missingPatch = false } = {}) {
         { filename: ".github/workflows/ci.yml", status: "modified", patch: "@@ -1 +1 @@\n-old\n+new" }
       ];
     },
-    async tree() { return ["src/a.mjs", ".github/workflows/ci.yml"]; },
+    async tree() { return ["src/a.mjs", ".github/workflows/ci.yml", "package-lock.json"]; },
     async fileContent() { return "name: CI\non: pull_request\n"; }
   };
 }
@@ -58,7 +58,7 @@ function mockGitlab({ missingPatch = false } = {}) {
         }
       ];
     },
-    async tree() { return ["src/a.mjs", ".gitlab-ci.yml"]; },
+    async tree() { return ["src/a.mjs", ".gitlab-ci.yml", "package-lock.json"]; },
     async fileContent(project, path) {
       return path === ".gitlab-ci.yml" ? "stages: [test]\n" : "export const value = 2;\n";
     }
@@ -81,6 +81,7 @@ test("collector uses authoritative GitHub data and includes workflow content", a
   assert.equal(payload.headSha, sha("b"));
   assert.equal(payload.workflows.length, 1);
   assert.ok(payload.securityFiles.some(item => item.path === "src/a.mjs"));
+  assert.ok(payload.securityFiles.some(item => item.path === "package-lock.json"));
   assert.ok(payload.securityFiles.some(item => item.path === ".github/workflows/ci.yml"));
   assert.ok(payload.securityFiles.every(item => typeof item.headContent === "string"));
 });
@@ -129,6 +130,7 @@ test("GitLab collector re-fetches authoritative MR, diff, tree and CI content", 
   assert.equal(payload.headSha, sha("b"));
   assert.ok(payload.workflows.some(item => item.path === ".gitlab-ci.yml"));
   assert.ok(payload.securityFiles.some(item => item.path === "src/a.mjs"));
+  assert.ok(payload.securityFiles.some(item => item.path === "package-lock.json"));
 });
 
 test("GitLab collector fails closed when a required text diff is missing", async () => {
@@ -166,7 +168,7 @@ function mockGitverse({ missingPatch = false } = {}) {
       return { commit: { tree: { sha: sha("c") } } };
     },
     async tree() {
-      return ["src/a.mjs", ".gitverse/workflows/ci.yml"];
+      return ["src/a.mjs", ".gitverse/workflows/ci.yml", "package-lock.json"];
     },
     async fileContent(repo, path) {
       return path.endsWith("ci.yml") ? "name: CI\non: pull_request\n" : "export const value = 2;\n";
@@ -196,6 +198,7 @@ test("GitVerse collector re-fetches authoritative PR, files, tree and workflow c
   assert.equal(payload.headSha, sha("b"));
   assert.ok(payload.workflows.some(item => item.path === ".gitverse/workflows/ci.yml"));
   assert.ok(payload.securityFiles.some(item => item.path === "src/a.mjs"));
+  assert.ok(payload.securityFiles.some(item => item.path === "package-lock.json"));
 });
 
 test("GitVerse collector fails closed when a required text patch is missing", async () => {
