@@ -149,6 +149,11 @@ function isSaasSecurityRelevantPath(path) {
     || /\.(?:sql|ya?ml|json|js|mjs|cjs|ts|tsx|jsx|py|php|go|cs|java|rb)$/i.test(path);
 }
 
+
+function isOssScannerSupportPath(path) {
+  return /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|requirements(?:-[^/]*)?\.txt|poetry\.lock|Pipfile(?:\.lock)?|pyproject\.toml|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|pom\.xml|build\.gradle(?:\.kts)?|gradle\.lockfile|composer\.json|composer\.lock|Gemfile(?:\.lock)?|packages\.lock\.json|[^/]+\.(?:csproj|fsproj))$/i.test(path || "");
+}
+
 function resolveBase(baseRef) {
   if (!baseRef) throw new Error("PEERIVO_BASE_REF is required");
   if (/^[0-9a-f]{7,40}$/i.test(baseRef)) {
@@ -201,6 +206,7 @@ export async function main() {
 
   const securityPaths = [...new Set([
     ...changes.filter((item) => item.status !== "removed" && isSaasSecurityRelevantPath(item.path)).map((item) => item.path),
+    ...files.filter(isOssScannerSupportPath),
     ...(files.includes(".reviewer/external-runtime-security.json") ? [".reviewer/external-runtime-security.json"] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
