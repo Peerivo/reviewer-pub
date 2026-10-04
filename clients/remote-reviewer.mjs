@@ -171,8 +171,8 @@ export async function main() {
   const maxFiles = positiveSafeInteger(process.env.PEERIVO_MAX_FILES, 1000, "PEERIVO_MAX_FILES");
   const maxPayloadBytes = positiveSafeInteger(process.env.PEERIVO_MAX_PAYLOAD_BYTES, 8 * 1024 * 1024, "PEERIVO_MAX_PAYLOAD_BYTES");
   const maxSecurityFiles = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILES, 200, "PEERIVO_MAX_SECURITY_FILES");
-  const maxSecurityFileBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILE_BYTES, 512 * 1024, "PEERIVO_MAX_SECURITY_FILE_BYTES");
-  const maxSecurityBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_BYTES, 4 * 1024 * 1024, "PEERIVO_MAX_SECURITY_BYTES");
+  const maxSecurityFileBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILE_BYTES, 4 * 1024 * 1024, "PEERIVO_MAX_SECURITY_FILE_BYTES");
+  const maxSecurityBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_BYTES, 8 * 1024 * 1024, "PEERIVO_MAX_SECURITY_BYTES");
   const platform = process.env.PEERIVO_PLATFORM || "gitverse";
   if (!["github", "gitverse"].includes(platform)) throw new Error(`Unsupported remote platform: ${platform}`);
 
@@ -212,10 +212,13 @@ export async function main() {
   if (securityPaths.length > maxSecurityFiles) {
     throw new Error(`Security-file count ${securityPaths.length} exceeds fail-closed limit ${maxSecurityFiles}`);
   }
+  const changedSecurityPaths = new Set(changes.map((item) => item.path));
   let securityBytes = 0;
   const securityFiles = securityPaths.map((path) => {
     const headContent = fileAt("HEAD", path);
-    const baseContent = fileAt(baseSha, path);
+    const baseContent = changedSecurityPaths.has(path) || path === ".reviewer/external-runtime-security.json"
+      ? fileAt(baseSha, path)
+      : null;
     for (const [label, value] of [["head", headContent], ["base", baseContent]]) {
       if (value === null) continue;
       const bytes = Buffer.byteLength(value);
