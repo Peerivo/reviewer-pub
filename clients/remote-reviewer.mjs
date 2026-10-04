@@ -149,6 +149,11 @@ function isSaasSecurityRelevantPath(path) {
     || /\.(?:sql|ya?ml|json|js|mjs|cjs|ts|tsx|jsx|py|php|go|cs|java|rb)$/i.test(path);
 }
 
+
+function isOssScannerSupportPath(path) {
+  return /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|requirements(?:-[^/]*)?\.txt|poetry\.lock|Pipfile(?:\.lock)?|pyproject\.toml|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|pom\.xml|build\.gradle(?:\.kts)?|gradle\.lockfile|composer\.json|composer\.lock|Gemfile(?:\.lock)?|packages\.lock\.json|[^/]+\.(?:csproj|fsproj))$/i.test(path || "");
+}
+
 function resolveBase(baseRef) {
   if (!baseRef) throw new Error("PEERIVO_BASE_REF is required");
   if (/^[0-9a-f]{7,40}$/i.test(baseRef)) {
@@ -166,8 +171,8 @@ export async function main() {
   const maxFiles = positiveSafeInteger(process.env.PEERIVO_MAX_FILES, 1000, "PEERIVO_MAX_FILES");
   const maxPayloadBytes = positiveSafeInteger(process.env.PEERIVO_MAX_PAYLOAD_BYTES, 8 * 1024 * 1024, "PEERIVO_MAX_PAYLOAD_BYTES");
   const maxSecurityFiles = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILES, 200, "PEERIVO_MAX_SECURITY_FILES");
-  const maxSecurityFileBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILE_BYTES, 512 * 1024, "PEERIVO_MAX_SECURITY_FILE_BYTES");
-  const maxSecurityBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_BYTES, 4 * 1024 * 1024, "PEERIVO_MAX_SECURITY_BYTES");
+  const maxSecurityFileBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_FILE_BYTES, 4 * 1024 * 1024, "PEERIVO_MAX_SECURITY_FILE_BYTES");
+  const maxSecurityBytes = positiveSafeInteger(process.env.PEERIVO_MAX_SECURITY_BYTES, 8 * 1024 * 1024, "PEERIVO_MAX_SECURITY_BYTES");
   const platform = process.env.PEERIVO_PLATFORM || "gitverse";
   if (!["github", "gitverse"].includes(platform)) throw new Error(`Unsupported remote platform: ${platform}`);
 
@@ -201,15 +206,19 @@ export async function main() {
 
   const securityPaths = [...new Set([
     ...changes.filter((item) => item.status !== "removed" && isSaasSecurityRelevantPath(item.path)).map((item) => item.path),
+    ...files.filter(isOssScannerSupportPath),
     ...(files.includes(".reviewer/external-runtime-security.json") ? [".reviewer/external-runtime-security.json"] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
     throw new Error(`Security-file count ${securityPaths.length} exceeds fail-closed limit ${maxSecurityFiles}`);
   }
+  const changedSecurityPaths = new Set(changes.map((item) => item.path));
   let securityBytes = 0;
   const securityFiles = securityPaths.map((path) => {
     const headContent = fileAt("HEAD", path);
-    const baseContent = fileAt(baseSha, path);
+    const baseContent = changedSecurityPaths.has(path) || path === ".reviewer/external-runtime-security.json"
+      ? fileAt(baseSha, path)
+      : null;
     for (const [label, value] of [["head", headContent], ["base", baseContent]]) {
       if (value === null) continue;
       const bytes = Buffer.byteLength(value);

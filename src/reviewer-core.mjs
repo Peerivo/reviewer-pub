@@ -11,6 +11,11 @@ function isSaasSecurityRelevantPath(path) {
     || /\.(?:sql|ya?ml|json|js|mjs|cjs|ts|tsx|jsx|py|php|go|cs|java|rb)$/i.test(path);
 }
 
+
+function isOssScannerSupportPath(path) {
+  return /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock|requirements(?:-[^/]*)?\.txt|poetry\.lock|Pipfile(?:\.lock)?|pyproject\.toml|go\.mod|go\.sum|Cargo\.toml|Cargo\.lock|pom\.xml|build\.gradle(?:\.kts)?|gradle\.lockfile|composer\.json|composer\.lock|Gemfile(?:\.lock)?|packages\.lock\.json|[^/]+\.(?:csproj|fsproj))$/i.test(path || "");
+}
+
 function fullSha(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{40}$/i.test(value)) throw new Error(`${label} is not a full commit SHA`);
   return value.toLowerCase();
@@ -33,8 +38,8 @@ export async function collectReviewPayload({
   maxWorkflows,
   maxWorkflowBytes,
   maxSecurityFiles = 200,
-  maxSecurityFileBytes = 512 * 1024,
-  maxSecurityBytes = 4 * 1024 * 1024
+  maxSecurityFileBytes = 4 * 1024 * 1024,
+  maxSecurityBytes = 8 * 1024 * 1024
 }) {
   const pr = await github.pullRequest(repo, pullNumber, token);
   const baseSha = fullSha(pr?.base?.sha, "base SHA");
@@ -70,6 +75,7 @@ export async function collectReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
@@ -85,11 +91,14 @@ export async function collectReviewPayload({
     }
   }
 
+  const changedSecurityPaths = new Set(changes.map((item) => item.path));
   let totalSecurityBytes = 0;
   const securityFiles = [];
   for (const path of securityPaths) {
     const headContent = await optionalContent(path, headSha);
-    const baseContent = await optionalContent(path, baseSha);
+    const baseContent = changedSecurityPaths.has(path) || path === RUNTIME_PROFILE
+      ? await optionalContent(path, baseSha)
+      : null;
     totalSecurityBytes += Buffer.byteLength(headContent || "") + Buffer.byteLength(baseContent || "");
     if (totalSecurityBytes > maxSecurityBytes) {
       throw new Error(`security snapshot exceeds MAX_SECURITY_BYTES (${maxSecurityBytes})`);
@@ -130,8 +139,8 @@ export async function collectGitLabReviewPayload({
   maxWorkflows,
   maxWorkflowBytes,
   maxSecurityFiles = 200,
-  maxSecurityFileBytes = 512 * 1024,
-  maxSecurityBytes = 4 * 1024 * 1024
+  maxSecurityFileBytes = 4 * 1024 * 1024,
+  maxSecurityBytes = 8 * 1024 * 1024
 }) {
   const project = await gitlab.project(repo);
   if (project?.path_with_namespace !== repo) throw new Error("GitLab project identity mismatch");
@@ -178,6 +187,7 @@ export async function collectGitLabReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
@@ -193,11 +203,14 @@ export async function collectGitLabReviewPayload({
     }
   }
 
+  const changedSecurityPaths = new Set(changes.map((item) => item.path));
   let totalSecurityBytes = 0;
   const securityFiles = [];
   for (const path of securityPaths) {
     const headContent = await optionalContent(sourceProjectId, path, headSha);
-    const baseContent = await optionalContent(project.id, path, baseSha);
+    const baseContent = changedSecurityPaths.has(path) || path === RUNTIME_PROFILE
+      ? await optionalContent(project.id, path, baseSha)
+      : null;
     totalSecurityBytes += Buffer.byteLength(headContent || "") + Buffer.byteLength(baseContent || "");
     if (totalSecurityBytes > maxSecurityBytes) {
       throw new Error(`security snapshot exceeds MAX_SECURITY_BYTES (${maxSecurityBytes})`);
@@ -235,8 +248,8 @@ export async function collectGitVerseReviewPayload({
   maxWorkflows,
   maxWorkflowBytes,
   maxSecurityFiles = 200,
-  maxSecurityFileBytes = 512 * 1024,
-  maxSecurityBytes = 4 * 1024 * 1024
+  maxSecurityFileBytes = 4 * 1024 * 1024,
+  maxSecurityBytes = 8 * 1024 * 1024
 }) {
   const repository = await gitverse.repository(repo);
   if (repository?.full_name !== repo) throw new Error("GitVerse repository identity mismatch");
@@ -286,6 +299,7 @@ export async function collectGitVerseReviewPayload({
 
   const securityPaths = [...new Set([
     ...changes.filter(item => item.status !== "removed" && isSaasSecurityRelevantPath(item.path)).map(item => item.path),
+    ...allFiles.filter(isOssScannerSupportPath),
     ...(allFiles.includes(RUNTIME_PROFILE) ? [RUNTIME_PROFILE] : [])
   ])];
   if (securityPaths.length > maxSecurityFiles) {
@@ -301,11 +315,14 @@ export async function collectGitVerseReviewPayload({
     }
   }
 
+  const changedSecurityPaths = new Set(changes.map((item) => item.path));
   let totalSecurityBytes = 0;
   const securityFiles = [];
   for (const path of securityPaths) {
     const headContent = await optionalContent(sourceRepo, path, headSha);
-    const baseContent = await optionalContent(repo, path, baseSha);
+    const baseContent = changedSecurityPaths.has(path) || path === RUNTIME_PROFILE
+      ? await optionalContent(repo, path, baseSha)
+      : null;
     totalSecurityBytes += Buffer.byteLength(headContent || "") + Buffer.byteLength(baseContent || "");
     if (totalSecurityBytes > maxSecurityBytes) {
       throw new Error(`security snapshot exceeds MAX_SECURITY_BYTES (${maxSecurityBytes})`);
