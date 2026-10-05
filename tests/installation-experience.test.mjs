@@ -18,7 +18,7 @@ for (const provider of ['gitlab', 'gitverse']) {
     const f = await setup(t, provider, { installed: false });
     const response = await fetch(f.base + f.manage, { method: 'POST', redirect: 'manual', headers: { cookie: f.cookie }, body: new URLSearchParams({ csrf: f.csrf, [provider === 'gitlab' ? 'project' : 'repository']: '7' }) });
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), `/${provider}/connected`);
+    assert.equal(response.headers.get('location'), provider === 'gitlab' ? '/gitlab/projects' : `/${provider}/connected`);
     const verifyStart = f.calls.length;
     const result = await fetch(f.base + response.headers.get('location'), { headers: { cookie: f.cookie } });
     const body = await result.text();
@@ -38,7 +38,12 @@ for (const provider of ['gitlab', 'gitverse']) {
       const body = await response.text();
       assert.equal(response.status, 200);
       assert.match(body, /data-testid="connection-banner" data-state="connected"/);
-      assert.match(body, /Save and verify connection/);
+      if (provider === 'gitlab') {
+        assert.match(body, /Search repositories|Найти репозиторий/);
+        assert.match(body, /Connected repositories|Подключённые репозитории/);
+      } else {
+        assert.match(body, /Save and verify connection/);
+      }
       assert.match(body, /Check connection again/);
     }
   });
@@ -61,7 +66,7 @@ for (const provider of ['gitlab', 'gitverse']) {
     const f = await setup(t, provider);
     const response = await fetch(f.base + `/connect/${provider}`, { redirect: 'manual', headers: { cookie: f.cookie } });
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), `/${provider}/connected`);
+    assert.equal(response.headers.get('location'), provider === 'gitlab' ? '/gitlab/projects' : `/${provider}/connected`);
     const auth = await fetch(f.base + `/connect/${provider}?reauthorize=1`, { redirect: 'manual', headers: { cookie: f.cookie } });
     assert.equal(auth.status, 302);
     assert.equal(new URL(auth.headers.get('location')).pathname, provider === 'gitlab' ? '/oauth/authorize' : '/signin/oauth/authorize');
@@ -139,3 +144,48 @@ for (const provider of ['gitlab', 'gitverse']) {
   });
 }
 
+
+
+test('gitlab: connected URL collapses into the single repository-management page', async t => {
+  const f = await setup(t, 'gitlab');
+  const response = await fetch(f.base + '/gitlab/connected', { redirect: 'manual', headers: { cookie: f.cookie } });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), '/gitlab/projects');
+});
+
+test('gitlab: one page shows connected repositories and searchable available repositories with per-repo actions', async t => {
+  const f = await setup(t, 'gitlab', { installed: false, count: 2 });
+  const add = await fetch(f.base + '/gitlab/projects', {
+    method: 'POST', redirect: 'manual', headers: { cookie: f.cookie },
+    body: new URLSearchParams({ csrf: f.csrf, operation: 'add', target: '7' })
+  });
+  assert.equal(add.status, 303);
+  assert.equal(add.headers.get('location'), '/gitlab/projects');
+
+  const page = await fetch(f.base + '/gitlab/projects', { headers: { cookie: f.cookie, 'accept-language': 'ru' } });
+  const body = await page.text();
+  assert.equal(page.status, 200);
+  assert.match(body, /Peerivo Reviewer для GitLab/);
+  assert.match(body, /Подключённые репозитории · 1/);
+  assert.match(body, /alice\/widget/);
+  assert.match(body, /alice\/widget1/);
+  assert.match(body, /data-repo-search/);
+  assert.match(body, /operation" value="add"/);
+  assert.match(body, /operation" value="remove"/);
+  assert.doesNotMatch(body, /Шаги подключения|Сохранить и проверить подключение/);
+
+  const remove = await fetch(f.base + '/gitlab/projects', {
+    method: 'POST', redirect: 'manual', headers: { cookie: f.cookie },
+    body: new URLSearchParams({ csrf: f.csrf, operation: 'remove', target: '7' })
+  });
+  assert.equal(remove.status, 303);
+  assert.equal(remove.headers.get('location'), '/gitlab/projects');
+});
+
+test('gitlab: repository search behavior is shipped in the same-origin UI script', async t => {
+  const f = await setup(t, 'gitlab');
+  const script = await (await fetch(f.base + '/assets/installation-ui.js')).text();
+  assert.match(script, /data-repo-search/);
+  assert.match(script, /data-repository/);
+  assert.match(script, /toLowerCase/);
+});

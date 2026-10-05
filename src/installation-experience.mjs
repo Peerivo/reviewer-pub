@@ -36,7 +36,18 @@ export function createInstallationExperience({ runtimeFor, html, redirect, readB
         const form = new URLSearchParams((await readBody(req, 256 * 1024)).toString('utf8'));
         try {
           if (provider === 'gitlab') {
-            await service.applyProjects({ sessionToken, csrf: form.get('csrf') || '', projectIds: form.getAll('project') });
+            const operation = form.get('operation') || '';
+            const target = Number(form.get('target'));
+            if (['add', 'remove'].includes(operation) && Number.isSafeInteger(target) && target > 0) {
+              const current = await service.projectSelection(sessionToken);
+              const ids = current.projects.filter(item => item.selected).map(item => item.id);
+              const next = operation === 'add'
+                ? [...new Set([...ids, target])]
+                : ids.filter(id => id !== target);
+              await service.applyProjects({ sessionToken, csrf: form.get('csrf') || '', projectIds: next });
+            } else {
+              await service.applyProjects({ sessionToken, csrf: form.get('csrf') || '', projectIds: form.getAll('project') });
+            }
           } else {
             await service.applyRepositories({
               sessionToken, csrf: form.get('csrf') || '', repositoryIds: form.getAll('repository'),
@@ -56,8 +67,12 @@ export function createInstallationExperience({ runtimeFor, html, redirect, readB
           redirect(res, `${paths.manage}?error=${code}`, { status: 303 });
           return true;
         }
-        // POST/Redirect/GET: verification is performed on the destination, not faked from a query flag.
-        redirect(res, paths.connected, { status: 303 });
+        // POST/Redirect/GET: GitLab stays on one management page; GitVerse keeps its result page.
+        redirect(res, provider === 'gitlab' ? paths.manage : paths.connected, { status: 303 });
+        return true;
+      }
+      if (provider === 'gitlab' && url.pathname === paths.connected) {
+        redirect(res, paths.manage, { status: 303 });
         return true;
       }
       // Perform sequentially so a rotated refresh token is never used concurrently by selection and verification.
