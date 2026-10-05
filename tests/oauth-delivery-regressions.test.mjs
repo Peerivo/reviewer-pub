@@ -77,7 +77,7 @@ for (const provider of providers) {
     const response = await fetch(base + provider.manage, { method: "POST", redirect: "manual", headers: { cookie: f.cookie }, body: new URLSearchParams({ csrf: f.csrf, [provider.field]: "7" }) });
     assert.equal(response.status, 303);
     const next = response.headers.get("location");
-    assert.equal(next, `/${provider.name}/connected`);
+    assert.equal(next, provider.name === "gitlab" ? provider.manage : `/${provider.name}/connected`);
     const confirmation = await fetch(base + next, { headers: { cookie: f.cookie } });
     assert.equal(confirmation.status, 200);
     assert.match(await confirmation.text(), /data-state="connected"/);
@@ -85,8 +85,15 @@ for (const provider of providers) {
       const page = await fetch(base + target, { headers: { cookie: f.cookie } });
       assert.equal(page.status, 200);
       const html = await page.text();
-      assert.match(html, new RegExp(`name="${provider.field}"[^>]*value="7"[^>]*checked`));
-      assert.ok(html.includes("Save and verify connection"));
+      if (provider.name === "gitlab") {
+        assert.match(html, /operation" value="remove"/);
+        assert.match(html, /Connected repositories|Подключённые репозитории/);
+        assert.match(html, /data-repo-search/);
+        assert.doesNotMatch(html, /Save and verify connection/);
+      } else {
+        assert.match(html, new RegExp(`name="${provider.field}"[^>]*value="7"[^>]*checked`));
+        assert.ok(html.includes("Save and verify connection"));
+      }
       assert.match(html, /data-testid="connection-banner" data-state="connected"/);
       assert.match(page.headers.get("cache-control"), /no-store/);
     }

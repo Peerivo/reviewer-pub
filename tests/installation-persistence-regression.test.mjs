@@ -21,10 +21,10 @@ for (const provider of ['gitlab', 'gitverse']) {
     assert.equal(response.status, 200);
     assert.ok((await response.text()).includes('data-testid="connection-banner"'), 'Persistent connection banner must be present without updated=1');
   });
-  test(`${provider}: save must leave the form for a dedicated connection result`, async t => {
+  test(`${provider}: save lands on the provider's canonical post-save page`, async t => {
     const f = await start(t);
     const response = await fetch(f.base + manage, { method: 'POST', redirect: 'manual', headers: { cookie: f.cookie }, body: new URLSearchParams({ csrf: f.csrf, [provider === 'gitlab' ? 'project' : 'repository']: '7' }) });
     assert.equal(response.status, 303);
-    assert.equal(response.headers.get('location'), `/${provider}/connected`, 'Saving must navigate to the verification/result page');
+    assert.equal(response.headers.get('location'), provider === 'gitlab' ? manage : `/${provider}/connected`);
   });
 }

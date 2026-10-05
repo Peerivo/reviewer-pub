@@ -48,6 +48,10 @@ export function installationFixture(provider, { installed = true, username = 'al
         hooks.set(project.id, hook);
         return Response.json(hook);
       }
+      if (url.pathname === `${hookPath}/${project.id + 80}` && options.method === 'DELETE') {
+        hooks.delete(project.id);
+        return new Response(null, { status: 204 });
+      }
     }
     throw new Error(`Unexpected fixture call: ${options.method} ${url.pathname}`);
   };
