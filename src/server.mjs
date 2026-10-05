@@ -222,7 +222,7 @@ export function createServer({
         const existing = runtime.store.getSessionInstallation(parseCookie(req, "peerivo_gitlab_install"));
         if (existing && url.searchParams.get("reauthorize") !== "1") {
           const paths = providerPaths("gitlab");
-          return redirect(res, selectedRecords("gitlab", runtime, existing.id).length ? paths.connected : paths.manage, { status: 303 });
+          return redirect(res, paths.manage, { status: 303 });
         }
         return redirect(res, runtime.beginOAuth());
       }
@@ -237,7 +237,7 @@ export function createServer({
           state: url.searchParams.get("state") || ""
         });
         const maxAge = Math.floor((resolvedOAuthConfig?.installSessionTtlMs || 60 * 60 * 1000) / 1000);
-        const destination = selectedRecords("gitlab", runtime, result.installationId).length ? "/gitlab/connected" : "/gitlab/projects";
+        const destination = "/gitlab/projects";
         return redirect(res, destination, {
           status: 303,
           headers: { "set-cookie": sessionCookie(result.sessionToken, maxAge) }
