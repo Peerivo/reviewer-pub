@@ -1,0 +1,29 @@
+{
+  "task_id": "reviewer-pub-main-push-20261022",
+  "revision": 1,
+  "repo": "Peerivo/reviewer-pub",
+  "user_scenarios": [
+    "valid signed push on actual default branch produces a check",
+    "feature branch push ignored",
+    "force push fails closed",
+    "truncated compare fails closed",
+    "PR workflow preserved",
+    "HMAC validation precedes push processing"
+  ],
+  "constraints": [
+    "App permissions remain least privilege",
+    "Existing app must subscribe to Push event externally",
+    "No claim of pre-receive blocking for direct commits",
+    "Hosted source transfer disclosed",
+    "No private core imported"
+  ],
+  "preconditions": [
+    "Exact two SHA range",
+    "No initial/branch deletion false PASS"
+  ],
+  "known_limitations": [
+    "GitHub compare endpoint caps 300 changed files",
+    "Check is post-push, not retroactive enforcement",
+    "Production event subscription requires administrative App settings update"
+  ]
+}
