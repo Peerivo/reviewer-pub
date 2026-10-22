@@ -1,5 +1,6 @@
 import { verifyWebhookSignature } from "./crypto.mjs";
 import { GitHubClient } from "./github.mjs";
+import { handleDefaultBranchPush } from "./push-review.mjs";
 import { collectReviewPayload, shouldReviewPullRequestAction, submitReview } from "./reviewer.mjs";
 
 const CHECK_NAME = "Peerivo Reviewer";
@@ -94,6 +95,7 @@ export function createApp({ config, fetchImpl = fetch }) {
     },
 
     async handleWebhook({ event, deliveryId, payload }) {
+      if (event === "push") return handleDefaultBranchPush({ github, config, payload, deliveryId });
       if (event !== "pull_request") return { accepted: false, reason: "event_not_used" };
       if (!shouldReviewPullRequestAction(payload?.action)) return { accepted: false, reason: "action_not_used" };
 
