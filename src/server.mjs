@@ -346,7 +346,7 @@ export function createServer({
 
         const event = String(req.headers["x-github-event"] || "");
         const deliveryId = String(req.headers["x-github-delivery"] || "");
-        if (event !== "pull_request") {
+        if (event !== "pull_request" && event !== "push") {
           return json(res, 202, { ok: true, accepted: false, reason: "event_not_used" });
         }
 

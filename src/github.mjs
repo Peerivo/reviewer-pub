@@ -72,6 +72,17 @@ export class GitHubClient {
     return payload.token;
   }
 
+  async repository(repo, token) {
+    return this.request("/repos/" + encodeRepo(repo), { token });
+  }
+
+  async compareCommits(repo, before, after, token) {
+    if (!/^[a-f0-9]{40}$/i.test(before) || !/^[a-f0-9]{40}$/i.test(after)) throw new GitHubError("invalid compare SHA", 400);
+    const result = await this.request("/repos/" + encodeRepo(repo) + "/compare/" + before + "..." + after, { token });
+    if (!Array.isArray(result?.files) || result.files.length >= 300) throw new GitHubError("GitHub compare files unavailable or truncated", 422);
+    return result;
+  }
+
   async pullRequest(repo, number, token) {
     return this.request(`/repos/${encodeRepo(repo)}/pulls/${number}`, { token });
   }
