@@ -11,7 +11,10 @@ for (let attempt = 0; attempt < 18; attempt++) {
     for (const provider of ['gitlab', 'gitverse']) assert.ok(body.includes(`href="/connect/${provider}"`));
     assert.ok(body.includes('Подключить GitHub') && body.includes('Подключить GitLab') && body.includes('Подключить GitVerse'));
     assert.ok(body.includes('https://github.com/apps/peerivo-reviewer/installations/new'));
-    assert.ok(body.includes('Одна лицензия активирует один репозиторий'));
+    assert.ok(body.includes('14 дней бесплатно только после подтверждённой привязки карты'));
+    assert.ok(body.includes('Платёжная активация пока недоступна'));
+    assert.ok(!body.includes('Одна лицензия активирует один репозиторий'));
+    assert.ok(!body.includes('Reviewer работает с пополняемого баланса'));
     assert.ok(body.includes('Peerivo Reviewer проверяет изменения в коде на риски безопасности'));
     assert.ok(body.includes('data-testid="product-description"'));
     assert.ok(body.includes('class="brand-logo" src="/assets/reviewer-logo.jpg"'));
@@ -27,7 +30,7 @@ for (let attempt = 0; attempt < 18; attempt++) {
       assert.equal(response.headers.get('cache-control'), 'no-store');
       assert.ok((await response.text()).includes('Подключить заново'), path + ': useful reconnect action');
     }
-    console.log('PASS: GitHub/GitLab/GitVerse cards, Reviewer logo, one-repository license copy, same-origin progressive UI, and protected HTML connection/settings pages. No user authorization or live project verification performed.');
+    console.log('PASS: GitHub/GitLab/GitVerse cards, Reviewer logo, honest card-verified postpaid disclosure, same-origin progressive UI, and protected HTML connection/settings pages. No user authorization or live card or project verification performed.');
     process.exit(0);
   } catch (error) {
     lastError = error;

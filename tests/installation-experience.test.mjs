@@ -116,7 +116,9 @@ test('direct installation page needs no README, and script is safely served same
   assert.match(body, /Подключить GitLab/);
   assert.match(body, /Подключить GitVerse/);
   assert.match(body, /github\.com\/apps\/peerivo-reviewer\/installations\/new/);
-  assert.match(body, /Reviewer работает с пополняемого баланса/);
+  assert.match(body, /14 дней бесплатно только после подтверждённой привязки карты/);
+  assert.match(body, /Платёжная активация пока недоступна/);
+  assert.doesNotMatch(body, /пополняемого баланса|автоматической активации пробного периода/);
   assert.match(body, /href="\/connect\/gitlab"/);
   assert.match(body, /href="\/connect\/gitverse"/);
   assert.match(response.headers.get('content-security-policy'), /script-src 'self'/);

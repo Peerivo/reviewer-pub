@@ -104,7 +104,8 @@ test("GitVerse save confirmation uses persisted installation verification and ke
   assert.match(body, /Manage projects/);
   assert.match(body, /Block merge on HIGH\/CRITICAL/);
   assert.match(body, /Promo code/);
-  assert.match(body, /free trial automatically/);
+  assert.match(body, /14-day trial cannot start automatically/);
+  assert.match(body, /payment-provider-verified card binding is required/);
 });
 
 test("GitVerse repository save enables hard gate for every selected repository", async (t) => {
