@@ -17,7 +17,7 @@ export function uiLanguage(req) {
 
 const copy = {
   en: {
-    product: 'Security review for code changes', productDescription: 'Peerivo Reviewer checks pull and merge requests for security risks and reports findings directly in your repository. It does not execute project code.', licenseRule: 'Reviewer uses a prepaid balance. Connected repositories consume that balance; the account shows current spend and an estimate of how many days remain.', githubHint: 'Install the GitHub App and select the repositories you want Reviewer to protect.',
+    product: 'Security review for code changes', productDescription: 'Peerivo Reviewer checks pull and merge requests for security risks and reports findings directly in your repository. It does not execute project code.', licenseRule: 'Approved billing: a 14-day trial starts only after the payment provider verifies a saved card; the monthly plan and actual overages are billed at month end. Payment activation is not live yet. Use an issued promo code or license for pilot access.', githubHint: 'Install the GitHub App and select the repositories you want Reviewer to protect.',
     home: 'Connect your repositories', intro: 'Choose a platform. Authorize Reviewer, select projects, then see a verified connection result. No README hunting or personal tokens.',
     direct: 'Direct connection', connect: 'Connect', manage: 'Manage projects', recheck: 'Check connection again', open: 'Open project', requests: 'Open merge requests', pulls: 'Open pull requests',
     connected: 'Peerivo Reviewer connected', attention: 'Connection needs attention', pending: 'Connection not confirmed', empty: 'Choose projects to connect',
@@ -34,7 +34,7 @@ const copy = {
     conflict: 'Some settings could not be saved. A project may belong to another installation. No complete success is being reported; check the saved connection and retry.',
     failed: 'Settings could not be fully saved or verified. Some changes may already have been applied. Check the current connection before trying again.',
     saved: 'Settings saved. The current connection state is shown below.',
-    promo: 'Promo code', optional: 'optional', promoHelp: 'Leave blank to activate the free trial automatically. No license key needs to be copied into GitVerse.',
+    promo: 'Promo code', optional: 'optional', promoHelp: 'Enter an issued gift or pilot promo code. A 14-day trial cannot start automatically: payment-provider-verified card binding is required. Payment onboarding is not live yet.',
     gate: 'Block merge on HIGH/CRITICAL', gateHelp: 'Installs the Peerivo Reviewer Hard Merge Gate in selected repositories. Its CI result is separate from this connection check.',
     gateConfigured: 'Hard Merge Gate configured; CI execution not checked here.',
     promo_invalid: 'Promo code not accepted. Check the code and try again.', license_required: 'Reviewer access is required. Activate a license or enter a valid promo code.', checkout_required: 'This discount requires a paid checkout before activation.',
@@ -42,7 +42,7 @@ const copy = {
     platform: 'Platform', privacy: 'Tokens remain on the server. Reviewer does not execute your project code.', installed: 'Connected', notSelected: 'Not connected', footer: 'Connection verification is read-only: no test commits, pipelines or reviews are started.', gitlabTitle: 'Peerivo Reviewer for GitLab', gitlabLead: 'Connect repositories one at a time. Reviewer verifies the connection immediately and keeps everything on this page.', connectedRepos: 'Connected repositories', addRepository: 'Add repository', removeRepository: 'Remove', repoSearch: 'Search repositories', noMatches: 'No repositories match your search.', availableRepos: 'Available repositories', openGitLab: 'Open in GitLab'
   },
   ru: {
-    product: 'Проверка безопасности изменений в коде', productDescription: 'Peerivo Reviewer проверяет изменения в коде на риски безопасности и показывает найденные проблемы прямо в pull/merge request. Код проекта не запускается.', licenseRule: 'Reviewer работает с пополняемого баланса. Подключённые репозитории расходуют баланс; в кабинете будет виден текущий расход и примерно на сколько дней хватит денег.', githubHint: 'Установите GitHub App и выберите репозитории, которые должен защищать Reviewer.',
+    product: 'Проверка безопасности изменений в коде', productDescription: 'Peerivo Reviewer проверяет изменения в коде на риски безопасности и показывает найденные проблемы прямо в pull/merge request. Код проекта не запускается.', licenseRule: 'Утверждённая модель: 14 дней бесплатно только после подтверждённой привязки карты, затем оплата тарифа и фактических превышений в конце месяца. Платёжная активация пока недоступна. Для пилота используйте выданный промокод или лицензию.', githubHint: 'Установите GitHub App и выберите репозитории, которые должен защищать Reviewer.',
     home: 'Подключите свои репозитории', intro: 'Выберите платформу, разрешите доступ и отметьте проекты. После сохранения — проверка подключения и понятный результат. Без поиска кнопки в README и передачи токенов.',
     direct: 'Прямое подключение', connect: 'Подключить', manage: 'Управлять проектами', recheck: 'Проверить подключение ещё раз', open: 'Открыть проект', requests: 'Перейти к merge request', pulls: 'Перейти к pull request',
     connected: 'Peerivo Reviewer подключён', attention: 'Подключение требует внимания', pending: 'Подключение не подтверждено', empty: 'Выберите проекты для подключения',
@@ -59,7 +59,7 @@ const copy = {
     conflict: 'Не все настройки удалось сохранить. Возможно, проект связан с другой установкой. Полный успех не подтверждён — проверьте текущее состояние и повторите попытку.',
     failed: 'Не удалось полностью сохранить или проверить настройки. Часть изменений могла примениться. Сначала проверьте текущее состояние подключения.',
     saved: 'Настройки сохранены. Текущее состояние подключения показано ниже.',
-    promo: 'Промокод', optional: 'необязательно', promoHelp: 'Оставьте поле пустым для автоматической активации пробного периода. Копировать ключ лицензии в GitVerse не нужно.',
+    promo: 'Промокод', optional: 'необязательно', promoHelp: 'Введите выданный промокод для пилота или подарочной лицензии. Пробный период не активируется автоматически: сначала нужна подтверждённая привязка карты. Подключение оплаты пока недоступно.',
     gate: 'Блокировать слияние при HIGH/CRITICAL', gateHelp: 'Устанавливает Peerivo Reviewer Hard Merge Gate в выбранные репозитории. Результат CI проверяется отдельно от подключения.',
     gateConfigured: 'Hard Merge Gate настроен; выполнение CI здесь не проверяется.',
     promo_invalid: 'Промокод не принят. Проверьте его и повторите попытку.', license_required: 'Нужен доступ к Reviewer. Активируйте лицензию или введите действующий промокод.', checkout_required: 'Для активации скидочного промокода сначала требуется оплата.',
